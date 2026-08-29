@@ -7,6 +7,7 @@ import { createMockProviders } from "../src/providers/mock.js";
 import type { ProviderSet } from "../src/providers/types.js";
 
 const config: AppConfig = {
+  host: "127.0.0.1",
   port: 3000,
   providerMode: "mock",
   matchThreshold: 0.82,

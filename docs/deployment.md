@@ -25,6 +25,7 @@ npm run build
 
 ```text
 NODE_ENV=production
+HOST=127.0.0.1
 PORT=3000
 PROVIDER_MODE=mock
 MATCH_THRESHOLD=0.82
@@ -49,6 +50,21 @@ ALLOWED_ORIGIN=https://photo.example.com
 - APM、WAF、反向代理均禁用请求/响应体采样。
 - 真实供应商必须承诺不训练、最短保留与可验证删除，并限定处理地域。
 - 只保留匿名运行指标；任何新增持久化必须重新取得用户授权并更新文档。
+
+## photo.svhw.tech 自动部署
+
+服务器的一次性 systemd、Nginx 和 Let's Encrypt 配置不由发布脚本修改。
+完成服务器初始化后，仓库内的 `scripts/deploy.sh` 只负责构建两个 workspace、
+把前端静态文件原子发布到 `/var/www/photo-story/current`、重启
+`photo-story.service`，以及检查本机后端和公网 HTTPS 端点。
+
+```bash
+npm run deploy
+```
+
+后端固定由服务器上的 systemd 配置监听 `127.0.0.1:3001`，Nginx 托管前端
+并将 `https://photo.svhw.tech/api/*` 代理到该端口。服务端 provider 配置位于
+`/etc/photo-story.env`；发布脚本不会创建或修改该文件。
 
 ## 发布验证
 
