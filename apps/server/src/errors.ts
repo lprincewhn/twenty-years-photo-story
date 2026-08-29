@@ -2,10 +2,12 @@ export type ErrorCode =
   | "CONSENT_REQUIRED"
   | "PHOTO_REQUIRED"
   | "INVALID_IMAGE"
+  | "INVALID_REQUEST"
   | "PHOTO_TOO_LARGE"
   | "NO_FACE"
   | "MULTIPLE_FACES"
   | "MATCH_BELOW_THRESHOLD"
+  | "RATE_LIMITED"
   | "PROVIDER_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
@@ -41,4 +43,3 @@ export function faceCountError(faceCount: number): AppError {
     true,
   );
 }
-

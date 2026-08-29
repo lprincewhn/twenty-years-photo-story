@@ -38,6 +38,7 @@ ALLOWED_ORIGIN=https://photo.example.com
 - 强制 TLS 1.2+ 和 HTTPS 重定向；相机 API 在非安全上下文不可用。
 - `/api/experience` 请求体上限设置为 6 MiB，超时应略大于 provider 总超时。
 - 保留 `X-Request-ID` 或由应用生成；访问日志不记录请求体、multipart 字段或查询内容。
+- 当前应用按单层反向代理配置 `trust proxy = 1`；若部署拓扑增加代理层级，必须同步调整并验证真实客户端 IP。
 - 增加 HSTS、CSP、`frame-ancestors`、`Permissions-Policy: camera=(self)` 等安全头。
 - 应用已有每分钟 30 次的进程内限制；多副本生产环境应在网关增加统一匿名速率限制。
 
@@ -61,4 +62,3 @@ curl -I https://photo.example.com/
 ## 回滚
 
 静态站与 API 使用可追踪版本镜像。回滚时同时回退前端与 API 契约兼容版本；本 MVP 无数据库迁移。发生疑似照片泄露时应立即停止入口、关闭可能采集请求体的日志/APM、轮换 provider 密钥并按事件响应流程通知负责人。
-

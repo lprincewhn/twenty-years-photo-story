@@ -1,19 +1,24 @@
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 
-export interface PersonEntry {
-  id: string;
-  displayName: string;
-  oldPhotoUrl: string;
-  authorization: "placeholder" | "authorized";
-  sourceNote: string;
-}
+const personSchema = z.object({
+  id: z.string().min(1),
+  displayName: z.string().min(1),
+  oldPhotoUrl: z.string().min(1),
+  authorization: z.enum(["placeholder", "authorized"]),
+  sourceNote: z.string().min(1),
+});
+
+const peopleSchema = z.array(personSchema).min(1);
+
+export type PersonEntry = z.infer<typeof personSchema>;
 
 const peoplePath = new URL("./people.json", import.meta.url);
 
+export function parsePeople(input: unknown): PersonEntry[] {
+  return peopleSchema.parse(input);
+}
+
 export function loadPeople(): PersonEntry[] {
-  const parsed: unknown = JSON.parse(readFileSync(peoplePath, "utf8"));
-  if (!Array.isArray(parsed)) {
-    throw new Error("人物库格式无效");
-  }
-  return parsed as PersonEntry[];
+  return parsePeople(JSON.parse(readFileSync(peoplePath, "utf8")));
 }

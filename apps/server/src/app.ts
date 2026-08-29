@@ -8,7 +8,7 @@ import express, {
 import { rateLimit } from "express-rate-limit";
 import multer from "multer";
 import type { AppConfig } from "./config.js";
-import { AppError } from "./errors.js";
+import { AppError, faceCountError } from "./errors.js";
 import { loadPeople } from "./people.js";
 import {
   allowedDifferenceCategories,
@@ -18,6 +18,7 @@ import {
 } from "./providers/types.js";
 
 const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const supportedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const demoCases = new Set<DemoCase>([
   "success",
@@ -30,6 +31,17 @@ const demoCases = new Set<DemoCase>([
 export interface AppDependencies {
   config: AppConfig;
   providers: ProviderSet;
+}
+
+function zeroingMemoryStorage(): multer.StorageEngine {
+  const storage = multer.memoryStorage();
+  return {
+    _handleFile: storage._handleFile.bind(storage),
+    _removeFile(request, file, callback) {
+      file.buffer?.fill(0);
+      storage._removeFile(request, file, callback);
+    },
+  };
 }
 
 function hasValidImageSignature(bytes: Buffer, mimeType: string): boolean {
@@ -55,7 +67,11 @@ function requestContext(
   response: Response,
   next: NextFunction,
 ): void {
-  response.locals.requestId = request.header("x-request-id") ?? randomUUID();
+  const incomingRequestId = request.header("x-request-id");
+  response.locals.requestId =
+    incomingRequestId && validRequestId.test(incomingRequestId)
+      ? incomingRequestId
+      : randomUUID();
   response.setHeader("x-request-id", response.locals.requestId as string);
   response.setHeader("x-content-type-options", "nosniff");
   response.setHeader("referrer-policy", "no-referrer");
@@ -79,15 +95,16 @@ export function createApp({ config, providers }: AppDependencies) {
   const app = express();
   const people = loadPeople();
   const upload = multer({
-    storage: multer.memoryStorage(),
+    storage: zeroingMemoryStorage(),
     limits: {
       files: 1,
       fileSize: MAX_PHOTO_BYTES,
-      fields: 2,
+      fields: 4,
     },
   });
 
   app.disable("x-powered-by");
+  app.set("trust proxy", 1);
   app.use(requestContext);
   app.use((request, response, next) => {
     if (request.header("origin") === config.allowedOrigin) {
@@ -111,7 +128,7 @@ export function createApp({ config, providers }: AppDependencies) {
         response,
         new AppError(
           429,
-          "PROVIDER_UNAVAILABLE",
+          "RATE_LIMITED",
           "操作太频繁",
           "照片没有被保存。请稍候一分钟再试。",
           true,
@@ -127,7 +144,7 @@ export function createApp({ config, providers }: AppDependencies) {
     async (request, response) => {
       const bytes = request.file?.buffer;
       try {
-        if (request.body.consent !== "true") {
+        if (request.body?.consent !== "true") {
           throw new AppError(
             400,
             "CONSENT_REQUIRED",
@@ -158,7 +175,10 @@ export function createApp({ config, providers }: AppDependencies) {
           );
         }
 
-        const requestedDemoCase = request.body.demoCase as string | undefined;
+        const requestedDemoCase =
+          config.providerMode === "mock"
+            ? (request.body?.demoCase as string | undefined)
+            : undefined;
         const demoCase: DemoCase =
           requestedDemoCase && demoCases.has(requestedDemoCase as DemoCase)
             ? (requestedDemoCase as DemoCase)
@@ -172,15 +192,7 @@ export function createApp({ config, providers }: AppDependencies) {
         try {
           const faceOutput = await providers.faceMatch.match(photo);
           if (faceOutput.faceCount !== 1) {
-            throw new AppError(
-              422,
-              faceOutput.faceCount === 0 ? "NO_FACE" : "MULTIPLE_FACES",
-              faceOutput.faceCount === 0 ? "没有检测到清晰人脸" : "检测到多张人脸",
-              faceOutput.faceCount === 0
-                ? "请换一张光线充足、正面且脸部无遮挡的单人照片。"
-                : "为避免把人物认错，请选择只包含一人的照片后重试。",
-              true,
-            );
+            throw faceCountError(faceOutput.faceCount);
           }
 
           const candidate = [...faceOutput.candidates].sort((a, b) => b.score - a.score)[0];
@@ -200,7 +212,10 @@ export function createApp({ config, providers }: AppDependencies) {
           }
 
           const person = people.find((entry) => entry.id === candidate.personId);
-          if (!person) {
+          if (
+            !person ||
+            (config.providerMode === "real" && person.authorization !== "authorized")
+          ) {
             throw new Error("provider 候选不在授权人物库");
           }
           const rawDifferences = await providers.difference.analyze(photo, person.id);
@@ -257,16 +272,46 @@ export function createApp({ config, providers }: AppDependencies) {
     },
   );
 
-  const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+  const errorHandler: ErrorRequestHandler = (error, request, response, _next) => {
     void _next;
-    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+    request.file?.buffer?.fill(0);
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        sendError(
+          response,
+          new AppError(
+            413,
+            "PHOTO_TOO_LARGE",
+            "图片太大",
+            "单张图片最大为 6 MiB，请压缩或重新选择。",
+            true,
+          ),
+        );
+        return;
+      }
+      if (
+        error.code === "LIMIT_UNEXPECTED_FILE" ||
+        error.code === "LIMIT_FILE_COUNT"
+      ) {
+        sendError(
+          response,
+          new AppError(
+            400,
+            "INVALID_IMAGE",
+            "图片字段无效",
+            "请只通过 photo 字段上传一张 JPEG、PNG 或 WebP 图片。",
+            true,
+          ),
+        );
+        return;
+      }
       sendError(
         response,
         new AppError(
-          413,
-          "PHOTO_TOO_LARGE",
-          "图片太大",
-          "单张图片最大为 6 MiB，请压缩或重新选择。",
+          400,
+          "INVALID_REQUEST",
+          "请求字段无效",
+          "上传请求包含过多或无效字段，请刷新页面后重试。",
           true,
         ),
       );

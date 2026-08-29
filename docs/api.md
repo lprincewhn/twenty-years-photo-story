@@ -61,11 +61,12 @@ curl -X POST http://localhost:3000/api/experience \
 | 400 | `CONSENT_REQUIRED` | 没有本次显式授权 |
 | 400 | `PHOTO_REQUIRED` | 未提交照片 |
 | 400 | `INVALID_IMAGE` | MIME 不受支持 |
+| 400 | `INVALID_REQUEST` | multipart 字段过多或无效 |
 | 413 | `PHOTO_TOO_LARGE` | 超过 6 MiB |
 | 422 | `NO_FACE` | 没有清晰单人脸 |
 | 422 | `MULTIPLE_FACES` | 检测到多张人脸 |
 | 422 | `MATCH_BELOW_THRESHOLD` | 分数低于阈值，不返回人物结论 |
-| 429 | `PROVIDER_UNAVAILABLE` | 请求过于频繁 |
+| 429 | `RATE_LIMITED` | 请求过于频繁 |
 | 502 | `PROVIDER_UNAVAILABLE` | provider 失败或返回不可信结果 |
 | 500 | `INTERNAL_ERROR` | 未预期服务错误 |
 
@@ -73,5 +74,4 @@ curl -X POST http://localhost:3000/api/experience \
 
 ## 保留和安全
 
-请求由 Multer 内存存储解析，单次最多一张图。服务在响应构造后的 `finally` 中清零可控 Buffer，不写磁盘、数据库或缓存。生产环境必须使用 HTTPS、限制来源、设置反向代理请求体上限和速率限制。
-
+请求由带清零语义的 Multer 内存存储解析，单次最多一张图。服务在响应构造后的 `finally` 和 Multer 错误清理路径中清零可控 Buffer，不写磁盘、数据库或缓存。生产环境必须使用 HTTPS、限制来源、设置反向代理请求体上限和速率限制。

@@ -18,10 +18,7 @@ function photo(demoCase: PhotoInput["demoCase"]): PhotoInput {
 describe("mock provider", () => {
   it("无需密钥即可返回匹配、可见差异和虚构故事", async () => {
     const face = await new MockFaceMatchProvider().match(photo("success"));
-    const differences = await new MockDifferenceProvider().analyze(
-      photo("success"),
-      face.candidates[0]!.personId,
-    );
+    const differences = await new MockDifferenceProvider().analyze(photo("success"));
     const story = await new MockStoryProvider().generate("示例人物", differences);
 
     expect(face).toEqual({
@@ -43,9 +40,8 @@ describe("mock provider", () => {
     ["multiple-faces", "MULTIPLE_FACES"],
     ["provider-error", "PROVIDER_UNAVAILABLE"],
   ] as const)("把 %s 场景映射为稳定领域错误", async (demoCase, code) => {
-    await expect(new MockFaceMatchProvider().match(photo(demoCase))).rejects.toMatchObject<
-      Partial<AppError>
-    >({ code });
+    await expect(new MockFaceMatchProvider().match(photo(demoCase))).rejects.toMatchObject({
+      code,
+    } satisfies Partial<AppError>);
   });
 });
-

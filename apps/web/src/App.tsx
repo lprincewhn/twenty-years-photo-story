@@ -288,23 +288,25 @@ export function App({ analyze = analyzePhoto }: AppProps) {
                 />
               </label>
             </div>
-            <details className="demo-options">
-              <summary>演示其他识别状态</summary>
-              <label>
-                演示状态
-                <select
-                  value={demoCase}
-                  onChange={(event) => setDemoCase(event.target.value as DemoCase)}
-                >
-                  <option value="success">成功结果</option>
-                  <option value="no-face">没有检测到人脸</option>
-                  <option value="multiple-faces">检测到多张人脸</option>
-                  <option value="unmatched">低于匹配阈值</option>
-                  <option value="provider-error">分析服务暂不可用</option>
-                </select>
-              </label>
-              <p>此选项只控制无密钥 mock，用于验收中文失败状态。</p>
-            </details>
+            {import.meta.env.DEV && (
+              <details className="demo-options">
+                <summary>演示其他识别状态</summary>
+                <label>
+                  演示状态
+                  <select
+                    value={demoCase}
+                    onChange={(event) => setDemoCase(event.target.value as DemoCase)}
+                  >
+                    <option value="success">成功结果</option>
+                    <option value="no-face">没有检测到人脸</option>
+                    <option value="multiple-faces">检测到多张人脸</option>
+                    <option value="unmatched">低于匹配阈值</option>
+                    <option value="provider-error">分析服务暂不可用</option>
+                  </select>
+                </label>
+                <p>此选项只控制无密钥 mock，用于验收中文失败状态。</p>
+              </details>
+            )}
           </section>
         )}
 
