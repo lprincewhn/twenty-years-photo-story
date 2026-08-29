@@ -1,0 +1,293 @@
+import { randomUUID } from "node:crypto";
+import express, {
+  type ErrorRequestHandler,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
+import { rateLimit } from "express-rate-limit";
+import multer from "multer";
+import type { AppConfig } from "./config.js";
+import { AppError } from "./errors.js";
+import { loadPeople } from "./people.js";
+import {
+  allowedDifferenceCategories,
+  type DemoCase,
+  type PhotoInput,
+  type ProviderSet,
+} from "./providers/types.js";
+
+const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+const supportedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const demoCases = new Set<DemoCase>([
+  "success",
+  "no-face",
+  "multiple-faces",
+  "unmatched",
+  "provider-error",
+]);
+
+export interface AppDependencies {
+  config: AppConfig;
+  providers: ProviderSet;
+}
+
+function hasValidImageSignature(bytes: Buffer, mimeType: string): boolean {
+  if (mimeType === "image/jpeg") {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mimeType === "image/png") {
+    return (
+      bytes.length >= 8 &&
+      bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    );
+  }
+  return (
+    mimeType === "image/webp" &&
+    bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
+    bytes.subarray(8, 12).toString("ascii") === "WEBP"
+  );
+}
+
+function requestContext(
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): void {
+  response.locals.requestId = request.header("x-request-id") ?? randomUUID();
+  response.setHeader("x-request-id", response.locals.requestId as string);
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("referrer-policy", "no-referrer");
+  next();
+}
+
+function sendError(response: Response, error: AppError): void {
+  response.status(error.status).json({
+    error: {
+      code: error.code,
+      message: error.message,
+      explanation: error.explanation,
+      retryable: error.retryable,
+      requestId: response.locals.requestId as string,
+      ...(error.details ? { details: error.details } : {}),
+    },
+  });
+}
+
+export function createApp({ config, providers }: AppDependencies) {
+  const app = express();
+  const people = loadPeople();
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      files: 1,
+      fileSize: MAX_PHOTO_BYTES,
+      fields: 2,
+    },
+  });
+
+  app.disable("x-powered-by");
+  app.use(requestContext);
+  app.use((request, response, next) => {
+    if (request.header("origin") === config.allowedOrigin) {
+      response.setHeader("access-control-allow-origin", config.allowedOrigin);
+      response.setHeader("vary", "Origin");
+    }
+    next();
+  });
+
+  app.get("/api/health", (_request, response) => {
+    response.json({ status: "ok", providerMode: config.providerMode });
+  });
+
+  const experienceLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 30,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (_request, response) => {
+      sendError(
+        response,
+        new AppError(
+          429,
+          "PROVIDER_UNAVAILABLE",
+          "操作太频繁",
+          "照片没有被保存。请稍候一分钟再试。",
+          true,
+        ),
+      );
+    },
+  });
+
+  app.post(
+    "/api/experience",
+    experienceLimiter,
+    upload.single("photo"),
+    async (request, response) => {
+      const bytes = request.file?.buffer;
+      try {
+        if (request.body.consent !== "true") {
+          throw new AppError(
+            400,
+            "CONSENT_REQUIRED",
+            "需要明确授权",
+            "请先阅读照片用途和保留说明，并主动勾选授权后再上传。",
+            false,
+          );
+        }
+        if (!request.file || !bytes) {
+          throw new AppError(
+            400,
+            "PHOTO_REQUIRED",
+            "请选择一张照片",
+            "请拍摄或从相册选择一张 JPEG、PNG 或 WebP 图片。",
+            true,
+          );
+        }
+        if (
+          !supportedMimeTypes.has(request.file.mimetype) ||
+          !hasValidImageSignature(bytes, request.file.mimetype)
+        ) {
+          throw new AppError(
+            400,
+            "INVALID_IMAGE",
+            "图片格式无效",
+            "只支持 JPEG、PNG 或 WebP 图片，请重新选择。",
+            true,
+          );
+        }
+
+        const requestedDemoCase = request.body.demoCase as string | undefined;
+        const demoCase: DemoCase =
+          requestedDemoCase && demoCases.has(requestedDemoCase as DemoCase)
+            ? (requestedDemoCase as DemoCase)
+            : "success";
+        const photo: PhotoInput = {
+          bytes,
+          mimeType: request.file.mimetype,
+          demoCase,
+        };
+
+        try {
+          const faceOutput = await providers.faceMatch.match(photo);
+          if (faceOutput.faceCount !== 1) {
+            throw new AppError(
+              422,
+              faceOutput.faceCount === 0 ? "NO_FACE" : "MULTIPLE_FACES",
+              faceOutput.faceCount === 0 ? "没有检测到清晰人脸" : "检测到多张人脸",
+              faceOutput.faceCount === 0
+                ? "请换一张光线充足、正面且脸部无遮挡的单人照片。"
+                : "为避免把人物认错，请选择只包含一人的照片后重试。",
+              true,
+            );
+          }
+
+          const candidate = [...faceOutput.candidates].sort((a, b) => b.score - a.score)[0];
+          const score = candidate?.score ?? 0;
+          if (!Number.isFinite(score) || score < 0 || score > 1) {
+            throw new Error("provider 返回了无效分数");
+          }
+          if (!candidate || score < config.matchThreshold) {
+            throw new AppError(
+              422,
+              "MATCH_BELOW_THRESHOLD",
+              "未找到足够可信的匹配",
+              "本次分数低于阈值，因此不会给出人物结论。可以换一张更清晰的正面照片重试。",
+              true,
+              { score, threshold: config.matchThreshold },
+            );
+          }
+
+          const person = people.find((entry) => entry.id === candidate.personId);
+          if (!person) {
+            throw new Error("provider 候选不在授权人物库");
+          }
+          const rawDifferences = await providers.difference.analyze(photo, person.id);
+          const differences = rawDifferences.filter((item) =>
+            allowedDifferenceCategories.includes(item.category),
+          );
+          const safeDifferences =
+            differences.length > 0
+              ? differences
+              : [{ category: "expression" as const, description: "两张照片都记录了自然的神态。" }];
+          const generatedStory = await providers.story.generate(
+            person.displayName,
+            safeDifferences,
+          );
+          const story = {
+            ...generatedStory,
+            label: "AI 创作/虚构" as const,
+            disclaimer: "本故事由 AI 根据可见元素虚构，不代表人物的真实经历。",
+          };
+
+          response.json({
+            requestId: response.locals.requestId as string,
+            retention: "现场照片仅在本次请求内存中处理，响应完成后即释放，不落盘、不用于训练。",
+            match: {
+              matched: true,
+              score,
+              threshold: config.matchThreshold,
+              confidence: score >= 0.92 ? "high" : "medium",
+              person: {
+                id: person.id,
+                displayName: person.displayName,
+                oldPhotoUrl: person.oldPhotoUrl,
+                sourceNote: person.sourceNote,
+              },
+            },
+            differences: safeDifferences,
+            story,
+          });
+        } catch (error) {
+          if (error instanceof AppError) {
+            throw error;
+          }
+          throw new AppError(
+            502,
+            "PROVIDER_UNAVAILABLE",
+            "分析服务暂时不可用",
+            "照片没有被保存。请稍后重试；若持续发生，请使用请求标识联系维护人员。",
+            true,
+          );
+        }
+      } finally {
+        bytes?.fill(0);
+      }
+    },
+  );
+
+  const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+    void _next;
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      sendError(
+        response,
+        new AppError(
+          413,
+          "PHOTO_TOO_LARGE",
+          "图片太大",
+          "单张图片最大为 6 MiB，请压缩或重新选择。",
+          true,
+        ),
+      );
+      return;
+    }
+    if (error instanceof AppError) {
+      sendError(response, error);
+      return;
+    }
+    sendError(
+      response,
+      new AppError(
+        500,
+        "INTERNAL_ERROR",
+        "服务处理失败",
+        "照片没有被保存。请稍后重试，并在需要时提供请求标识。",
+        true,
+      ),
+    );
+  };
+  app.use(errorHandler);
+
+  return app;
+}
