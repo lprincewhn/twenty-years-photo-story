@@ -1,0 +1,28 @@
+{
+  "name": "twenty-years-photo-story",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n 服务端,前端 \"npm run dev -w @photo-story/server\" \"npm run dev -w @photo-story/web\"",
+    "lint": "eslint apps --max-warnings=0",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.35.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.35.0",
+    "globals": "^16.3.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.42.0"
+  }
+}
+

@@ -1,50 +1,44 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# “二十年前与现在”项目章程
 
-## Core Principles
+## 核心原则
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### 一、中文文档（不可妥协）
+所有产品、需求、设计、计划、任务、测试说明、维护文档、README、部署说明与接口说明必须使用中文。代码标识符、协议字段、命令和无法准确翻译的专有名词可以使用英文，但必须提供中文上下文。每次评审必须检查新增文档是否符合本原则。
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### 二、隐私优先与数据最小化
+现场照片和由其产生的特征默认只在内存中处理，完成请求后立即释放，不落盘、不进入日志、不用于训练。只收集完成一次体验所必需的数据，传输必须加密。任何持久化均需另行说明目的、期限和删除方式，并重新取得明确授权；没有这三项时不得持久化。
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### 三、显式授权与安全推断
+访问相机、读取相册和上传照片前必须以易懂中文说明用途、处理方式及保留策略，并取得用户主动授权。不得通过暗示、预选或捆绑取得授权。只描述发型、服饰、表情、配饰等可见且非敏感的变化；不得推断或暗示健康、年龄、种族、民族、宗教、政治倾向、性取向、残障、社会经济状况等敏感属性。
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### 四、可信 AI 与可解释失败
+生成内容必须在标题和正文附近显著标记“AI 创作/虚构”，不得冒充人物真实经历。人脸匹配必须公开阈值和置信信息；低于阈值只能报告“未匹配”，不得给出身份结论。相机拒绝、无效图片、无人脸、多人脸、未匹配、上游失败和网络错误都必须提供中文、可行动且不泄露内部信息的解释。
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### 五、测试先行与可替换边界
+需求先形成可验证验收场景，再编写失败测试，最后实现并重构。人脸匹配、可见差异分析、故事生成必须通过独立 provider 接口隔离；无密钥 mock 必须支持完整演示。阈值边界、授权、异常映射、流程状态和接口契约均需自动化测试。任何合并必须通过 lint、类型检查、测试和构建。
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### 六、移动端可访问性与渐进增强
+移动端 H5 是首要体验。界面必须支持键盘、屏幕阅读器、清晰焦点、足够对比度、可缩放文本、至少 44×44 像素触控目标和减少动态效果偏好。相机 API 不可用或被拒绝时必须提供文件选择回退；核心流程不得仅依赖颜色、动画或特定设备能力。
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+## 工程与安全约束
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+- 使用受支持的 TypeScript 与现代、少量依赖；客户端不得包含 provider 密钥。
+- 上传端点限制 MIME、文件大小和请求频率；生产环境通过 HTTPS 与受控来源提供服务。
+- 人物库只能包含有明确授权、来源和用途记录的资料；仓库默认仅放自制插画或不构成真实人脸的占位资源。
+- 日志只记录请求标识、状态码、耗时和匿名错误类别；禁止记录照片、二进制摘要、人脸特征、故事输入或可识别身份信息。
+- API 应返回稳定错误码、中文提示、是否可重试及请求标识；真实 provider 故障不得降级为虚假成功。
+- 保持实现简单：优先单请求、内存处理和无状态部署，新增持久化、队列或数据库前必须证明必要性并完成隐私评审。
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## 开发流程与质量门
 
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+1. 以 `spec.md` 的用户故事和验收标准为事实来源，`plan.md` 记录技术决策，`tasks.md` 提供可追踪实施顺序。
+2. 先为 provider、阈值和主要用户状态编写测试；实现后执行 `npm run lint`、`npm run typecheck`、`npm test`、`npm run build`。
+3. 评审逐项确认中文文档、授权文案、敏感属性禁区、AI 标识、无落盘处理、移动端可访问性和失败解释。
+4. 引入真实人物资料或真实 provider 前，必须完成授权记录、安全配置、数据处理协议、删除策略和契约测试。
+5. 部署变更必须同步 README/运维文档；破坏性 API 变更必须升级契约版本并提供迁移说明。
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+## 治理
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+本章程优先于项目内其他开发惯例。修订必须说明原因、受影响产物、迁移步骤和生效日期，并按语义化版本更新章程版本。涉及隐私边界、敏感属性或授权标准的放宽属于主版本变更；新增约束属于次版本变更；文字澄清属于补丁版本变更。所有 PR 必须声明质量门结果；不符合项只能在有明确期限、责任人与风险说明时临时豁免。
+
+**版本**：1.0.0 | **批准日期**：2026-08-29 | **最近修订**：2026-08-29
