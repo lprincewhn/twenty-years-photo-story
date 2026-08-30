@@ -24,6 +24,25 @@
 6. 由第二位审核者核对图片与授权记录；在真实 provider 的受控索引中建立同一 `personId`。
 7. 使用非生产副本运行阈值校准、误匹配测试与删除演练。
 
+完成授权与人工检查后，使用服务端管理脚本写入资料。脚本会校验人物 ID 和图片签名，将照片以不可猜测文件名复制到服务端私有目录，并原子更新人物元数据：
+
+```bash
+npm run people -w @photo-story/server -- add \
+  --id person-id \
+  --display-name "批准的展示名" \
+  --photo ./approved-photo.webp \
+  --source-note "已完成特定用途授权；详细记录保存在受控授权系统。"
+```
+
+支持 JPEG、PNG 和 WebP，单张不超过 6 MiB。`authorization` 默认为 `authorized`；自制演示资料可显式传入 `--authorization placeholder`。
+
+查询全部人物或单个人物：
+
+```bash
+npm run people -w @photo-story/server -- list
+npm run people -w @photo-story/server -- get person-id
+```
+
 示例元数据（不应直接用于真实人物）：
 
 ```json
@@ -40,3 +59,11 @@
 ## 删除与撤回
 
 收到撤回后立即从服务端私有资源目录、人物 JSON、真实 provider 索引和备份轮换计划中删除，并记录完成时间。受控端点不允许 CDN 缓存，因此删除后立即停止提供文件；已经签发的 grant 最多在 `GRANT_TTL_SECONDS`（默认 5 分钟）后失效，且因人物条目已删除无法继续读取。若无法立即删除备份，应停止恢复使用并在既定最短周期内过期。现场照片不在人物库或备份中，因此正常情况下没有现场照片删除工单。
+
+脚本会同时删除人物条目和对应的私有照片：
+
+```bash
+npm run people -w @photo-story/server -- delete person-id
+```
+
+脚本不管理真实 provider 索引、授权记录或备份，执行后仍需按上述撤回流程完成这些外部系统的清理。
