@@ -15,7 +15,7 @@ const successResult: ExperienceResult = {
     person: {
       id: "demo-xiaoxia",
       displayName: "示例人物·小夏",
-      oldPhotoUrl: "/people/demo-xiaoxia-old.svg",
+      oldPhotoUrl: "/api/people/demo-xiaoxia/photo",
       sourceNote: "项目自制几何插画，不构成真实人物资料。",
     },
   },

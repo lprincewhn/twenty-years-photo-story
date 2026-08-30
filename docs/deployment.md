@@ -30,6 +30,8 @@ PORT=3000
 PROVIDER_MODE=mock
 MATCH_THRESHOLD=0.82
 ALLOWED_ORIGIN=https://photo.example.com
+PEOPLE_ASSET_SECRET=使用秘密管理生成并注入的至少32字符随机值
+GRANT_TTL_SECONDS=300
 ```
 
 演示环境可使用 mock。生产真实能力上线前必须实现并评审三个 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。密钥通过云秘密管理注入，仅服务端进程可读；不得写入镜像、构建参数、静态资源或日志。
@@ -38,10 +40,12 @@ ALLOWED_ORIGIN=https://photo.example.com
 
 - 强制 TLS 1.2+ 和 HTTPS 重定向；相机 API 在非安全上下文不可用。
 - `/api/experience` 请求体上限设置为 6 MiB，超时应略大于 provider 总超时。
+- 不得暴露或代理旧的 `/people/` 静态路径；`/api/people/*/photo` 必须转发到 Node 服务，禁止在反向代理或 CDN 缓存。
 - 保留 `X-Request-ID` 或由应用生成；访问日志不记录请求体、multipart 字段或查询内容。
 - 当前应用按单层反向代理配置 `trust proxy = 1`；若部署拓扑增加代理层级，必须同步调整并验证真实客户端 IP。
 - 增加 HSTS、CSP、`frame-ancestors`、`Permissions-Policy: camera=(self)` 等安全头。
 - 应用已有每分钟 30 次的进程内限制；多副本生产环境应在网关增加统一匿名速率限制。
+- 多副本必须共享同一个 `PEOPLE_ASSET_SECRET`，否则在一个副本签发的照片 grant 无法由另一个副本验证。未配置时生成的临时密钥仅适用于单实例演示。
 
 ## 隐私加固
 

@@ -94,6 +94,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /people/{personId}/photo:
+    get:
+      summary: 读取成功匹配人物的私有照片
+      parameters:
+        - in: path
+          name: personId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 私有且不可缓存的人物照片
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-store
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+            image/svg+xml: {}
+        "403":
+          description: 缺少、无效、过期或人物不匹配的照片 grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 人物或照片不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     ExperienceResult:
@@ -184,6 +218,8 @@ components:
                 - NO_FACE
                 - MULTIPLE_FACES
                 - MATCH_BELOW_THRESHOLD
+                - PHOTO_GRANT_REQUIRED
+                - PERSON_PHOTO_NOT_FOUND
                 - RATE_LIMITED
                 - PROVIDER_UNAVAILABLE
                 - INTERNAL_ERROR

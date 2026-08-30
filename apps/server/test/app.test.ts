@@ -1,5 +1,6 @@
+import { createHmac } from "node:crypto";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppConfig } from "../src/config.js";
 import { parsePeople } from "../src/people.js";
@@ -12,6 +13,8 @@ const config: AppConfig = {
   providerMode: "mock",
   matchThreshold: 0.82,
   allowedOrigin: "http://localhost:5173",
+  peopleAssetSecret: "test-secret-that-is-at-least-32-characters",
+  grantTtlSeconds: 300,
 };
 const validJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
 
@@ -178,6 +181,75 @@ describe("照片故事 API", () => {
     expect(response.body.differences).toHaveLength(4);
     expect(response.body.story.label).toBe("AI 创作/虚构");
     expect(response.body.retention).toContain("不落盘");
+    expect(response.body.match.person.oldPhotoUrl).toBe(
+      "/api/people/demo-xiaoxia/photo",
+    );
+    expect(response.headers["set-cookie"]?.[0]).toContain("ps_grant=");
+    expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
+    expect(response.headers["set-cookie"]?.[0]).toContain("Secure");
+    expect(response.headers["set-cookie"]?.[0]).toContain("SameSite=Strict");
+  });
+
+  it("只向完成匹配且 grant 人物一致的请求返回私有照片", async () => {
+    const target = app();
+    await request(target).get("/api/people/demo-xiaoxia/photo").expect(403);
+
+    const experience = await validRequest(target).expect(200);
+    const cookie = experience.headers["set-cookie"]?.[0]?.split(";")[0];
+    expect(cookie).toBeTruthy();
+    const photo = await request(target)
+      .get("/api/people/demo-xiaoxia/photo")
+      .set("cookie", cookie!)
+      .expect(200);
+    expect(photo.headers["content-type"]).toMatch(/^image\/svg\+xml/);
+    expect(photo.headers["cache-control"]).toBe("private, no-store");
+    expect(photo.headers["content-disposition"]).toBe("inline");
+    expect(photo.headers["content-security-policy"]).toBe("default-src 'none'");
+
+    const wrongPersonPayload = Buffer.from(
+      JSON.stringify({
+        personId: "another-person",
+        exp: Math.floor(Date.now() / 1000) + 300,
+        requestId: "wrong-person-grant",
+      }),
+    ).toString("base64url");
+    const wrongPersonSignature = createHmac("sha256", config.peopleAssetSecret)
+      .update(wrongPersonPayload)
+      .digest("base64url");
+    await request(target)
+      .get("/api/people/demo-xiaoxia/photo")
+      .set("cookie", `ps_grant=${wrongPersonPayload}.${wrongPersonSignature}`)
+      .expect(403);
+
+    await request(target)
+      .get("/api/people/another-person/photo")
+      .set("cookie", cookie!)
+      .expect(404);
+  });
+
+  it("拒绝过期、篡改和路径穿越形式的照片请求", async () => {
+    const target = app(undefined, { grantTtlSeconds: 1 });
+    const now = Date.now();
+    const dateSpy = vi.spyOn(Date, "now").mockReturnValue(now);
+    const experience = await validRequest(target).expect(200);
+    const cookie = experience.headers["set-cookie"]?.[0]?.split(";")[0];
+    expect(cookie).toBeTruthy();
+
+    dateSpy.mockReturnValue(now + 2_000);
+    await request(target)
+      .get("/api/people/demo-xiaoxia/photo")
+      .set("cookie", cookie!)
+      .expect(403);
+    dateSpy.mockRestore();
+
+    await request(target)
+      .get("/api/people/demo-xiaoxia/photo")
+      .set("cookie", `${cookie}tampered`)
+      .expect(403);
+    await request(target)
+      .get("/api/people/%2E%2E%2Fpeople.json/photo")
+      .set("cookie", cookie!)
+      .expect(404);
   });
 
   it("分数等于阈值时可以匹配", async () => {
@@ -273,7 +345,8 @@ describe("照片故事 API", () => {
         {
           id: "person",
           displayName: "人物",
-          oldPhotoUrl: "/person.jpg",
+          oldPhotoUrl: "/api/people/person/photo",
+          oldPhotoFile: "person.jpg",
           authorization: "unknown",
           sourceNote: "说明",
         },

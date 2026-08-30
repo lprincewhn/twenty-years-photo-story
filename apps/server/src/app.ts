@@ -1,4 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { extname, resolve, sep } from "node:path";
 import express, {
   type ErrorRequestHandler,
   type NextFunction,
@@ -18,8 +21,16 @@ import {
 } from "./providers/types.js";
 
 const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+const peopleAssetsDirectory = fileURLToPath(new URL("./assets/people", import.meta.url));
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const supportedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const photoContentTypes: Readonly<Record<string, string>> = {
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+};
 const demoCases = new Set<DemoCase>([
   "success",
   "no-face",
@@ -31,6 +42,76 @@ const demoCases = new Set<DemoCase>([
 export interface AppDependencies {
   config: AppConfig;
   providers: ProviderSet;
+}
+
+interface PhotoGrant {
+  personId: string;
+  exp: number;
+  requestId: string;
+}
+
+function signGrant(payload: PhotoGrant, secret: string): string {
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+  return `${encodedPayload}.${signature}`;
+}
+
+function readCookie(request: Request, name: string): string | undefined {
+  for (const cookie of request.headers.cookie?.split(";") ?? []) {
+    const separatorIndex = cookie.indexOf("=");
+    if (separatorIndex !== -1 && cookie.slice(0, separatorIndex).trim() === name) {
+      return cookie.slice(separatorIndex + 1).trim();
+    }
+  }
+  return undefined;
+}
+
+function verifyGrant(token: string | undefined, personId: string, secret: string): boolean {
+  if (!token) {
+    return false;
+  }
+  const [encodedPayload, encodedSignature, extra] = token.split(".");
+  if (!encodedPayload || !encodedSignature || extra !== undefined) {
+    return false;
+  }
+
+  const expectedSignature = createHmac("sha256", secret).update(encodedPayload).digest();
+  let actualSignature: Buffer;
+  try {
+    actualSignature = Buffer.from(encodedSignature, "base64url");
+  } catch {
+    return false;
+  }
+  if (
+    actualSignature.length !== expectedSignature.length ||
+    !timingSafeEqual(actualSignature, expectedSignature)
+  ) {
+    return false;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as unknown;
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      !("personId" in payload) ||
+      !("exp" in payload) ||
+      !("requestId" in payload)
+    ) {
+      return false;
+    }
+    const grant = payload as Record<string, unknown>;
+    return (
+      grant.personId === personId &&
+      typeof grant.exp === "number" &&
+      Number.isInteger(grant.exp) &&
+      grant.exp > Math.floor(Date.now() / 1000) &&
+      typeof grant.requestId === "string" &&
+      validRequestId.test(grant.requestId)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function zeroingMemoryStorage(): multer.StorageEngine {
@@ -137,6 +218,71 @@ export function createApp({ config, providers }: AppDependencies) {
     },
   });
 
+  const photoLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 30,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (_request, response) => {
+      sendError(
+        response,
+        new AppError(
+          429,
+          "RATE_LIMITED",
+          "操作太频繁",
+          "请稍候一分钟再查看人物照片。",
+          true,
+        ),
+      );
+    },
+  });
+
+  app.get("/api/people/:personId/photo", photoLimiter, async (request, response) => {
+    const person = people.find((entry) => entry.id === request.params.personId);
+    if (!person) {
+      throw new AppError(
+        404,
+        "PERSON_PHOTO_NOT_FOUND",
+        "人物照片不存在",
+        "该人物照片不存在或已撤回。",
+        false,
+      );
+    }
+    if (!verifyGrant(readCookie(request, "ps_grant"), person.id, config.peopleAssetSecret)) {
+      throw new AppError(
+        403,
+        "PHOTO_GRANT_REQUIRED",
+        "无权查看人物照片",
+        "请先完成本次照片匹配，再查看对应人物照片。",
+        false,
+      );
+    }
+
+    const assetPath = resolve(peopleAssetsDirectory, person.oldPhotoFile);
+    if (!assetPath.startsWith(`${resolve(peopleAssetsDirectory)}${sep}`)) {
+      throw new AppError(
+        404,
+        "PERSON_PHOTO_NOT_FOUND",
+        "人物照片不存在",
+        "该人物照片不存在或已撤回。",
+        false,
+      );
+    }
+    const contentType = photoContentTypes[extname(assetPath).toLowerCase()];
+    if (!contentType) {
+      throw new Error("人物照片格式不在允许列表中");
+    }
+
+    const photo = await readFile(assetPath);
+    response.setHeader("cache-control", "private, no-store");
+    response.setHeader("content-disposition", "inline");
+    response.setHeader("content-type", contentType);
+    if (contentType === "image/svg+xml") {
+      response.setHeader("content-security-policy", "default-src 'none'");
+    }
+    response.send(photo);
+  });
+
   app.post(
     "/api/experience",
     experienceLimiter,
@@ -236,8 +382,24 @@ export function createApp({ config, providers }: AppDependencies) {
             disclaimer: "本故事由 AI 根据可见元素虚构，不代表人物的真实经历。",
           };
 
+          const requestId = response.locals.requestId as string;
+          const grant = signGrant(
+            {
+              personId: person.id,
+              exp: Math.floor(Date.now() / 1000) + config.grantTtlSeconds,
+              requestId,
+            },
+            config.peopleAssetSecret,
+          );
+          response.cookie("ps_grant", grant, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: config.grantTtlSeconds * 1000,
+            path: "/api/people",
+          });
           response.json({
-            requestId: response.locals.requestId as string,
+            requestId,
             retention: "现场照片仅在本次请求内存中处理，响应完成后即释放，不落盘、不用于训练。",
             match: {
               matched: true,
