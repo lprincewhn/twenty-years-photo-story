@@ -2,9 +2,9 @@
   {
     "id": "demo-xiaoxia",
     "displayName": "示例人物·小夏",
-    "oldPhotoUrl": "/people/demo-xiaoxia-old.svg",
+    "oldPhotoUrl": "/api/people/demo-xiaoxia/photo",
+    "oldPhotoFile": "demo-xiaoxia-old.svg",
     "authorization": "placeholder",
     "sourceNote": "项目自制几何插画，仅用于流程演示，不构成真实人脸或真实身份资料。"
   }
 ]
-

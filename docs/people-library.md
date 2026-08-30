@@ -2,7 +2,7 @@
 
 ## 默认演示资料
 
-`apps/server/src/people.json` 只有 `demo-xiaoxia`，对应 `apps/web/public/people/demo-xiaoxia-old.svg`。该 SVG 由项目代码中的几何图形组成，标注“示例插画 · 非真实人物”，不构成真实人脸或身份材料。
+`apps/server/src/people.json` 只有 `demo-xiaoxia`，对应服务端私有目录 `apps/server/src/assets/people/demo-xiaoxia-old.svg`。该 SVG 由项目代码中的几何图形组成，标注“示例插画 · 非真实人物”，不构成真实人脸或身份材料。
 
 ## 禁止事项
 
@@ -19,8 +19,8 @@
 1. 取得照片中人物对“照片故事匹配演示”这一具体用途的书面授权。
 2. 记录授权人、材料来源、授权日期、用途、允许环境、到期日与撤回渠道；授权记录存放在受控系统，不能提交个人信息到本公开代码库。
 3. 检查照片中没有未授权旁人、位置水印、证件、联系方式等额外个人信息。
-4. 生成最小化版本，删除 EXIF/GPS，采用不可猜测文件名并限制访问。
-5. 在 `people.json` 中增加唯一 `id`、适当的展示名、站内图片路径、`authorization: "authorized"` 与不含个人信息的来源说明。
+4. 生成最小化 WebP 版本，删除 EXIF/GPS，采用不可猜测文件名，并放入服务端私有 `assets/people` 目录；不得放入前端静态目录。
+5. 在 `people.json` 中增加唯一 `id`、适当的展示名、受控端点路径、私有资源文件名、`authorization: "authorized"` 与不含个人信息的来源说明。
 6. 由第二位审核者核对图片与授权记录；在真实 provider 的受控索引中建立同一 `personId`。
 7. 使用非生产副本运行阈值校准、误匹配测试与删除演练。
 
@@ -30,7 +30,8 @@
 {
   "id": "内部不可识别标识",
   "displayName": "已批准的展示名",
-  "oldPhotoUrl": "/people/受控资源名.webp",
+  "oldPhotoUrl": "/api/people/内部不可识别标识/photo",
+  "oldPhotoFile": "不可猜测资源名.webp",
   "authorization": "authorized",
   "sourceNote": "已完成特定用途授权；详细记录保存在受控授权系统。"
 }
@@ -38,5 +39,4 @@
 
 ## 删除与撤回
 
-收到撤回后立即从前端资源、人物 JSON、真实 provider 索引、CDN 和备份轮换计划中删除，并记录完成时间。若无法立即删除备份，应停止恢复使用并在既定最短周期内过期。现场照片不在人物库或备份中，因此正常情况下没有现场照片删除工单。
-
+收到撤回后立即从服务端私有资源目录、人物 JSON、真实 provider 索引和备份轮换计划中删除，并记录完成时间。受控端点不允许 CDN 缓存，因此删除后立即停止提供文件；已经签发的 grant 最多在 `GRANT_TTL_SECONDS`（默认 5 分钟）后失效，且因人物条目已删除无法继续读取。若无法立即删除备份，应停止恢复使用并在既定最短周期内过期。现场照片不在人物库或备份中，因此正常情况下没有现场照片删除工单。

@@ -35,6 +35,7 @@ apps/
 ├── server/
 │   ├── src/
 │   │   ├── app.ts
+│   │   ├── assets/people/
 │   │   ├── config.ts
 │   │   ├── errors.ts
 │   │   ├── people.json
@@ -42,7 +43,6 @@ apps/
 │   │   └── server.ts
 │   └── test/
 └── web/
-    ├── public/people/
     ├── src/
     │   ├── api.ts
     │   ├── App.tsx
@@ -91,4 +91,3 @@ specs/001-photo-story-mvp/
 - **图片内存压力**：6 MiB 限制、单文件、请求结束清零、生产反向代理限流。
 - **真实 provider 输出敏感内容**：适配器校验加允许列表过滤；契约测试覆盖越界输出。
 - **对象 URL 泄漏**：重拍、重新体验和组件卸载时统一 revoke。
-

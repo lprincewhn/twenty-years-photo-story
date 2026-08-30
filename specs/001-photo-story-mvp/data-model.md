@@ -8,7 +8,8 @@
 |---|---|---|---|
 | `id` | 字符串 | 唯一、非空 | 内部示例标识 |
 | `displayName` | 字符串 | 非空 | 达到阈值后显示的示例名称 |
-| `oldPhotoUrl` | 字符串 | 站内相对地址 | 自制插画或已授权旧照 |
+| `oldPhotoUrl` | 字符串 | `/api/people/:id/photo` | 短时 grant 保护的站内读取端点 |
+| `oldPhotoFile` | 字符串 | 无路径分隔符的文件名 | 服务端私有目录中的自制插画或已授权旧照 |
 | `authorization` | 枚举 | `placeholder` 或 `authorized` | 资源授权状态 |
 | `sourceNote` | 字符串 | 非空 | 来源与用途记录 |
 
@@ -63,4 +64,3 @@
 | `retryable` | 布尔 | 是否适合用户重试 |
 | `requestId` | 字符串 | 不含用户内容的排障标识 |
 | `details` | 可选对象 | 仅安全数值，如分数和阈值 |
-

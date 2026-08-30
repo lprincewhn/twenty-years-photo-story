@@ -36,7 +36,13 @@ curl -X POST http://localhost:3000/api/experience \
   -F photo=@./已获授权的测试图片.jpg
 ```
 
-成功响应包含请求标识、保留说明、匹配分数与阈值、人物示例、允许类别差异和带固定标签的虚构故事。现场照片本身不会出现在响应中。
+成功响应包含请求标识、保留说明、匹配分数与阈值、人物示例、允许类别差异和带固定标签的虚构故事。现场照片本身不会出现在响应中。匹配成功时，服务端还会签发 5 分钟有效、绑定匹配人物的 `HttpOnly; Secure; SameSite=Strict` 授权 Cookie；前端无需读取该 Cookie。
+
+## 读取匹配人物照片
+
+`GET /api/people/:personId/photo`
+
+仅完成成功匹配后可读取该次匹配人物的照片。请求必须携带服务端签发的短时 `ps_grant` Cookie；缺少、篡改、过期或绑定到其他人物的 grant 均返回 `403`。响应使用 `Cache-Control: private, no-store`，SVG 还带有 `Content-Security-Policy: default-src 'none'`，不得由 CDN 缓存。
 
 ## 错误格式
 
@@ -66,6 +72,8 @@ curl -X POST http://localhost:3000/api/experience \
 | 422 | `NO_FACE` | 没有清晰单人脸 |
 | 422 | `MULTIPLE_FACES` | 检测到多张人脸 |
 | 422 | `MATCH_BELOW_THRESHOLD` | 分数低于阈值，不返回人物结论 |
+| 403 | `PHOTO_GRANT_REQUIRED` | 缺少、无效、过期或人物不匹配的照片授权 |
+| 404 | `PERSON_PHOTO_NOT_FOUND` | 人物或已登记照片不存在 |
 | 429 | `RATE_LIMITED` | 请求过于频繁 |
 | 502 | `PROVIDER_UNAVAILABLE` | provider 失败或返回不可信结果 |
 | 500 | `INTERNAL_ERROR` | 未预期服务错误 |
