@@ -32,6 +32,11 @@ export interface ExperienceResult {
     content: string;
     disclaimer: string;
   };
+  narration: {
+    mimeType: "audio/mpeg" | "audio/wav";
+    audioBase64: string;
+    provider: "azure-speech" | "mock";
+  };
 }
 
 export interface ApiErrorInfo {
@@ -97,4 +102,3 @@ export const analyzePhoto: AnalyzePhoto = async (photo, consent, demoCase) => {
   }
   return payload as ExperienceResult;
 };
-

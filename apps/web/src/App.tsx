@@ -369,6 +369,17 @@ export function App({ analyze = analyzePhoto }: AppProps) {
               <p>{result.story.content}</p>
               <footer>{result.story.disclaimer}</footer>
             </article>
+            <div className="narration">
+              <strong>有感情地听故事</strong>
+              <audio
+                aria-label="故事情感朗读"
+                autoPlay
+                controls
+                src={`data:${result.narration.mimeType};base64,${result.narration.audioBase64}`}
+              >
+                当前浏览器不支持音频播放。
+              </audio>
+            </div>
             <p className="retention">{result.retention}</p>
             <button className="primary" type="button" onClick={reset}>重新体验</button>
           </section>

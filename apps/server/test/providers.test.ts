@@ -3,8 +3,10 @@ import { AppError } from "../src/errors.js";
 import {
   MockDifferenceProvider,
   MockFaceMatchProvider,
+  MockNarrationProvider,
   MockStoryProvider,
 } from "../src/providers/mock.js";
+import { AzureSpeechProvider } from "../src/providers/azure-speech.js";
 import type { PhotoInput } from "../src/providers/types.js";
 
 function photo(demoCase: PhotoInput["demoCase"]): PhotoInput {
@@ -20,6 +22,7 @@ describe("mock provider", () => {
     const face = await new MockFaceMatchProvider().match(photo("success"));
     const differences = await new MockDifferenceProvider().analyze(photo("success"));
     const story = await new MockStoryProvider().generate("示例人物", differences);
+    const narration = await new MockNarrationProvider().synthesize(story.content);
 
     expect(face).toEqual({
       faceCount: 1,
@@ -33,6 +36,37 @@ describe("mock provider", () => {
     ]);
     expect(story.label).toBe("AI 创作/虚构");
     expect(story.disclaimer).toContain("不代表人物的真实经历");
+    expect(narration).toMatchObject({ mimeType: "audio/wav", provider: "mock" });
+    expect(Buffer.from(narration.audioBase64, "base64").subarray(0, 4).toString()).toBe("RIFF");
+  });
+
+  it("使用 Azure Speech 情感样式合成 MP3 并转义故事文本", async () => {
+    let requestBody = "";
+    const fetchMock = async (_input: string | URL | Request, init?: RequestInit) => {
+      requestBody = String(init?.body);
+      return new Response(Buffer.from("mock-mp3"), { status: 200 });
+    };
+    const provider = new AzureSpeechProvider(
+      {
+        mode: "azure",
+        key: "secret",
+        region: "chinaeast2",
+        voice: "zh-CN-XiaoxiaoNeural",
+        style: "affectionate",
+      },
+      fetchMock,
+    );
+
+    const narration = await provider.synthesize("温柔地说：你 & 我 <二十年>");
+
+    expect(requestBody).toContain('style="affectionate"');
+    expect(requestBody).toContain("你 &amp; 我 &lt;二十年&gt;");
+    expect(requestBody).not.toContain("secret");
+    expect(narration).toEqual({
+      mimeType: "audio/mpeg",
+      audioBase64: Buffer.from("mock-mp3").toString("base64"),
+      provider: "azure-speech",
+    });
   });
 
   it.each([

@@ -15,6 +15,7 @@ SVHW-16 的可运行移动端 H5 MVP：用户明确授权后拍摄或选择当�
 - `getUserMedia` 前置相机与移动端相册 `capture` 回退
 - 预览、重拍、确认后才上传和重新体验
 - 可替换的人脸匹配、可见差异分析、故事生成三个 provider 接口
+- Azure Speech 情感语音合成，结果生成后自动朗读并保留播放控件
 - 默认阈值 0.82，并展示分数、阈值与置信级别
 - 只允许发型、服饰、表情、配饰四类客观可见差异
 - 成功、相机拒绝、无效图片、无人脸、多人脸、未匹配、网络和 provider 失败中文状态
@@ -59,6 +60,10 @@ npm run dev
 | `PROVIDER_MODE` | `mock` | `mock` 可直接演示；`real` 需先实现适配器 |
 | `MATCH_THRESHOLD` | `0.82` | 服务端匹配阈值，允许 0.50～0.99 |
 | `ALLOWED_ORIGIN` | `http://localhost:5173` | 允许的前端来源 |
+| `AZURE_SPEECH_KEY` | 未设置 | Azure Speech 服务端密钥；与 Region 同时配置 |
+| `AZURE_SPEECH_REGION` | 未设置 | Azure Speech 区域，如 `chinaeast2` |
+| `AZURE_SPEECH_VOICE` | `zh-CN-XiaoxiaoNeural` | 中文神经语音 |
+| `AZURE_SPEECH_STYLE` | `affectionate` | Azure 情感朗读样式 |
 
 真实 provider 密钥只能配置在服务端秘密管理中，不能带 `VITE_` 前缀、不能写入前端、不能提交。`.env.example` 只有变量占位说明，不含真实密钥。
 

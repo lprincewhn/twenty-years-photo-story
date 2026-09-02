@@ -366,6 +366,9 @@ export function createApp({ config, providers }: AppDependencies) {
             label: "AI 创作/虚构" as const,
             disclaimer: "本故事由 AI 根据可见元素虚构，不代表人物的真实经历。",
           };
+          const narration = await providers.narration.synthesize(
+            `${story.title}。${story.content}`,
+          );
 
           const requestId = response.locals.requestId as string;
           const grant = signGrant(
@@ -400,6 +403,7 @@ export function createApp({ config, providers }: AppDependencies) {
             },
             differences: safeDifferences,
             story,
+            narration,
           });
         } catch (error) {
           if (error instanceof AppError) {

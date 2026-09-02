@@ -32,9 +32,13 @@ MATCH_THRESHOLD=0.82
 ALLOWED_ORIGIN=https://photo.example.com
 PEOPLE_ASSET_SECRET=使用秘密管理生成并注入的至少32字符随机值
 GRANT_TTL_SECONDS=300
+AZURE_SPEECH_KEY=通过秘密管理注入
+AZURE_SPEECH_REGION=chinaeast2
+AZURE_SPEECH_VOICE=zh-CN-XiaoxiaoNeural
+AZURE_SPEECH_STYLE=affectionate
 ```
 
-演示环境可使用 mock。生产真实能力上线前必须实现并评审三个 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。密钥通过云秘密管理注入，仅服务端进程可读；不得写入镜像、构建参数、静态资源或日志。
+演示环境可使用 mock。Azure Speech 可独立接入：`AZURE_SPEECH_KEY` 与 `AZURE_SPEECH_REGION` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。生产真实分析能力上线前必须实现并评审三个分析 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。密钥通过云秘密管理注入，仅服务端进程可读；不得写入镜像、构建参数、静态资源或日志。
 
 ## 反向代理要求
 
