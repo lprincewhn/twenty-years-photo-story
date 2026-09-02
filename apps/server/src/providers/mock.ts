@@ -56,16 +56,17 @@ export class MockDifferenceProvider implements DifferenceProvider {
 
 export class MockStoryProvider implements StoryProvider {
   async generate(
-    displayName: string,
+    _displayName: string,
     differences: VisibleDifference[],
     _signal?: AbortSignal,
   ): Promise<FictionStory> {
+    void _displayName;
     void _signal;
     const details = differences.slice(0, 2).map((item) => item.description).join(" ");
     return {
       label: "AI 创作/虚构",
       title: "寄给二十年后的一张明信片",
-      content: `${displayName}在虚构的午后翻开旧相册。${details} 照片之间仿佛夹着一张未寄出的明信片，提醒人们珍惜每一次真诚的笑容。`,
+      content: `你在虚构的午后翻开旧相册。${details} 照片之间仿佛夹着一张未寄出的明信片，提醒你珍惜每一次真诚的笑容。`,
       disclaimer: "本故事由 AI 根据可见元素虚构，不代表人物的真实经历。",
     };
   }

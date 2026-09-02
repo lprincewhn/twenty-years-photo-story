@@ -157,6 +157,20 @@ function sendError(response: Response, error: AppError): void {
   });
 }
 
+function normalizeFaceBox(
+  faceBox: { left: number; top: number; width: number; height: number } | null,
+  photoWidth: number | null,
+  photoHeight: number | null,
+) {
+  if (!faceBox || !photoWidth || !photoHeight) return null;
+  return {
+    left: faceBox.left / photoWidth,
+    top: faceBox.top / photoHeight,
+    width: faceBox.width / photoWidth,
+    height: faceBox.height / photoHeight,
+  };
+}
+
 export function createApp({ config, providers }: AppDependencies) {
   const app = express();
   const peopleLibrary = loadPeopleLibrary();
@@ -432,6 +446,11 @@ export function createApp({ config, providers }: AppDependencies) {
                 displayName: person.displayName,
                 oldPhotoUrl: person.oldPhotoUrl,
                 sourceNote: person.sourceNote,
+                faceBox: normalizeFaceBox(
+                  person.faceBox,
+                  person.photoWidth,
+                  person.photoHeight,
+                ),
               },
             },
             differences: safeDifferences,

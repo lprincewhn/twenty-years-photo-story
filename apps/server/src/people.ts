@@ -147,6 +147,9 @@ export type PeopleLibrary = z.infer<typeof peopleLibrarySchema>;
 export type ResolvedPersonEntry = PersonEntry & {
   oldPhotoFile: string;
   photoMimeType: LibraryPhoto["mimeType"];
+  photoWidth: number | null;
+  photoHeight: number | null;
+  faceBox: FaceBox | null;
 };
 
 function mimeTypeFromFile(file: string): LibraryPhoto["mimeType"] {
@@ -192,7 +195,16 @@ export function resolvePeople(library: PeopleLibrary): ResolvedPersonEntry[] {
   return library.people.map((person) => {
     const photo = photos.get(person.photoId);
     if (!photo) throw new Error(`人物照片不存在：${person.photoId}`);
-    return { ...person, oldPhotoFile: photo.file, photoMimeType: photo.mimeType };
+    const member = photo.members.find((entry) => entry.personId === person.id);
+    if (!member) throw new Error(`人物未登记在照片中：${person.id}`);
+    return {
+      ...person,
+      oldPhotoFile: photo.file,
+      photoMimeType: photo.mimeType,
+      photoWidth: photo.width,
+      photoHeight: photo.height,
+      faceBox: member.faceBox,
+    };
   });
 }
 

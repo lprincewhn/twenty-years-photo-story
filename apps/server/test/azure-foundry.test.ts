@@ -36,7 +36,7 @@ describe("Azure Foundry provider", () => {
               description: "发型由短发变为长发。",
             }],
           })
-        : completion({ title: "相册的一页", content: "这是一段温暖的虚构故事。" });
+        : completion({ title: "相册的一页", content: "你翻开相册，读到一段温暖的虚构故事。" });
     });
     const client = new AzureFoundryClient(config, {
       credential,
@@ -56,12 +56,14 @@ describe("Azure Foundry provider", () => {
       label: "AI 创作/虚构",
       title: "相册的一页",
     });
+    expect(story.content).toContain("你");
     expect(bodies).toHaveLength(2);
     expect(bodies.every((body) => body.model === "gpt-5.6-terra")).toBe(true);
     expect(bodies.every((body) =>
       (body.response_format as { type: string }).type === "json_schema")).toBe(true);
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
+    expect(JSON.stringify(bodies[1])).not.toContain("家人");
   });
 
   it.each([
@@ -88,5 +90,20 @@ describe("Azure Foundry provider", () => {
       { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
       { bytes: Buffer.from("old"), mimeType: "image/jpeg" },
     )).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
+  });
+
+  it("拒绝没有使用第二人称或混用第三人称的故事", async () => {
+    const responses = [
+      { title: "相册", content: "她翻开了一本旧相册。" },
+      { title: "相册", content: "你看见他翻开了一本旧相册。" },
+    ];
+    for (const response of responses) {
+      const client = new AzureFoundryClient(config, {
+        credential,
+        fetch: vi.fn(async () => completion(response)) as typeof globalThis.fetch,
+      });
+      await expect(new AzureFoundryStoryProvider(client).generate("家人", []))
+        .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
+    }
   });
 });

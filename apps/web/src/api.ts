@@ -23,6 +23,12 @@ export interface ExperienceResult {
       displayName: string;
       oldPhotoUrl: string;
       sourceNote: string;
+      faceBox: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      } | null;
     };
   };
   differences: VisibleDifference[];
@@ -97,4 +103,3 @@ export const analyzePhoto: AnalyzePhoto = async (photo, consent, demoCase) => {
   }
   return payload as ExperienceResult;
 };
-

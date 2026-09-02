@@ -17,6 +17,7 @@ const successResult: ExperienceResult = {
       displayName: "示例人物·小夏",
       oldPhotoUrl: "/api/people/demo-xiaoxia/photo",
       sourceNote: "项目自制几何插画，不构成真实人物资料。",
+      faceBox: { left: 0.2, top: 0.15, width: 0.3, height: 0.4 },
     },
   },
   differences: [
@@ -60,6 +61,13 @@ describe("移动端核心体验", () => {
     expect(screen.getAllByText(/AI 创作\/虚构/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("模拟匹配分数 94%")).toBeInTheDocument();
     expect(screen.getByText("结论阈值 82%")).toBeInTheDocument();
+    expect(screen.getByLabelText("匹配人物位置")).toHaveStyle({
+      left: "20%",
+      top: "15%",
+      width: "30%",
+      height: "40%",
+    });
+    expect(screen.getByText("这是一则温暖的虚构故事。")).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");
 
     await user.click(screen.getByRole("button", { name: "重新体验" }));

@@ -171,7 +171,7 @@ components:
           $ref: "#/components/schemas/FictionStory"
     Person:
       type: object
-      required: [id, displayName, oldPhotoUrl, sourceNote]
+      required: [id, displayName, oldPhotoUrl, sourceNote, faceBox]
       properties:
         id:
           type: string
@@ -181,6 +181,29 @@ components:
           type: string
         sourceNote:
           type: string
+        faceBox:
+          description: 匹配人物在旧照中的归一化位置；旧版占位人物可能没有坐标。
+          oneOf:
+            - type: object
+              required: [left, top, width, height]
+              properties:
+                left:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                top:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                width:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 1
+                height:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 1
+            - type: "null"
     VisibleDifference:
       type: object
       required: [category, description]
