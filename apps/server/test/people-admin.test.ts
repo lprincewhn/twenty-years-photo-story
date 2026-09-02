@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hasExifGpsData, readExifOrientation } from "../src/exif.js";
 import {
   runPeopleAdmin,
   validateFaceBox,
@@ -18,6 +19,49 @@ function pngHeader(width: number, height: number): Buffer {
   buffer.writeUInt32BE(width, 16);
   buffer.writeUInt32BE(height, 20);
   return buffer;
+}
+
+/**
+ * JPEG carrying an Exif orientation tag, a GPS IFD pointer, and an SOF0 frame
+ * declaring the stored (unrotated) dimensions — the shape a phone photo has.
+ */
+function jpegWithOrientation(
+  storedWidth: number,
+  storedHeight: number,
+  orientation: number,
+): Buffer {
+  const tiff = Buffer.alloc(8 + 2 + 24 + 4);
+  tiff.write("MM", 0, "ascii");
+  tiff.writeUInt16BE(0x002a, 2);
+  tiff.writeUInt32BE(8, 4);
+  tiff.writeUInt16BE(2, 8);
+  tiff.writeUInt16BE(0x0112, 10); // Orientation
+  tiff.writeUInt16BE(3, 12);
+  tiff.writeUInt32BE(1, 14);
+  tiff.writeUInt16BE(orientation, 18);
+  tiff.writeUInt16BE(0x8825, 22); // GPS IFD pointer
+  tiff.writeUInt16BE(4, 24);
+  tiff.writeUInt32BE(1, 26);
+  tiff.writeUInt32BE(0, 30);
+  const payload = Buffer.concat([Buffer.from("Exif\0\0", "ascii"), tiff]);
+  const app1 = Buffer.alloc(4);
+  app1[0] = 0xff;
+  app1[1] = 0xe1;
+  app1.writeUInt16BE(payload.length + 2, 2);
+
+  // Marker (2) + declared length (17 = 2 length bytes + 15 payload for 3 components).
+  const sof0 = Buffer.alloc(19);
+  sof0[0] = 0xff;
+  sof0[1] = 0xc0;
+  sof0.writeUInt16BE(17, 2);
+  sof0[4] = 8;
+  sof0.writeUInt16BE(storedHeight, 5);
+  sof0.writeUInt16BE(storedWidth, 7);
+  sof0[9] = 3;
+  const sos = Buffer.from([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x12, 0x34]);
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8]), app1, payload, sof0, sos, Buffer.from([0xff, 0xd9]),
+  ]);
 }
 
 describe("人物库管理脚本", () => {
@@ -100,6 +144,89 @@ describe("人物库管理脚本", () => {
     expect(library.photos[0]?.members.map((member) => member.personId)).toEqual(["person-a", "person-b"]);
     expect(client.createPerson).toHaveBeenCalledTimes(2);
     expect(client.identify).toHaveBeenCalledTimes(1);
+  });
+
+  it("竖拍照片（orientation=6）按 Azure 旋转后的坐标系校验人脸框", async () => {
+    // Regression for SVHWB-6: the photo is stored 4618x3464 but Exif
+    // orientation 6 means Azure reports rectangles against 3464x4618. Validating
+    // against the stored frame rejected the face at top=3297 (bottom 3708 >
+    // 3464) even though it is legitimate. Coordinates are from the real photo.
+    const inputPhoto = join(root, "portrait.jpg");
+    await writeFile(inputPhoto, jpegWithOrientation(4618, 3464, 6));
+    const faces = [
+      { faceId: "11111111-1111-4111-8111-111111111111", faceRectangle: { left: 1614, top: 3297, width: 325, height: 411 }, qualityForRecognition: "high" as const },
+      { faceId: "22222222-2222-4222-8222-222222222222", faceRectangle: { left: 1733, top: 2066, width: 294, height: 369 }, qualityForRecognition: "high" as const },
+      { faceId: "33333333-3333-4333-8333-333333333333", faceRectangle: { left: 1761, top: 2905, width: 272, height: 336 }, qualityForRecognition: "medium" as const },
+    ];
+    const personIds = faces.map((_face, index) => `aaaaaaaa-aaaa-4aaa-8aaa-00000000000${index}`);
+    let created = 0;
+    const client: PeopleAdminAzureClient = {
+      detect: vi.fn(async (_bytes, returnFaceId) =>
+        faces.map((face) => returnFaceId ? face : { ...face, faceId: undefined })),
+      identify: vi.fn(async (faceIds: string[]) => faceIds.map((faceId: string) => ({
+        faceId,
+        candidates: [{ personId: personIds[faces.findIndex((face) => face.faceId === faceId)]!, confidence: 1 }],
+      }))),
+      ensureGroup: vi.fn(async () => undefined),
+      createPerson: vi.fn(async () => personIds[created++]!),
+      addFace: vi.fn(async () => randomUUID()),
+      deleteFace: vi.fn(async () => undefined),
+      deletePerson: vi.fn(async () => undefined),
+      train: vi.fn(async () => undefined),
+      waitForTraining: vi.fn(async () => undefined),
+    };
+
+    await runPeopleAdmin([
+      "add", "--photo", inputPhoto, "--source-note", "全员已授权",
+      "--member", "adult:成年人:0", "--member", "child-one:儿童一:1", "--member", "child-two:儿童二:2",
+    ], paths, { write: (value) => outputs.push(value) }, { azureClient: client });
+
+    const library = parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8")));
+    expect(library.people).toHaveLength(3);
+    // Stored dimensions follow Azure's frame, so faceBox values stay comparable.
+    expect(library.photos[0]).toMatchObject({ width: 3464, height: 4618 });
+    // A medium-quality face is accepted; only "low" is refused.
+    expect(library.photos[0]?.members.map((member) => member.personId))
+      .toEqual(["adult", "child-one", "child-two"]);
+  });
+
+  it("入库时剥离 GPS 等元数据，但保留 orientation", async () => {
+    const inputPhoto = join(root, "geotagged.jpg");
+    const original = jpegWithOrientation(4618, 3464, 6);
+    await writeFile(inputPhoto, original);
+    expect(hasExifGpsData(original)).toBe(true);
+
+    await runPeopleAdmin([
+      "add", "--id", "person-geo", "--display-name", "带定位", "--photo", inputPhoto,
+      "--source-note", "已完成用途授权。",
+    ], paths, { write: (value) => outputs.push(value) });
+
+    const added = outputs[0] as { people: Array<{ oldPhotoFile: string }> };
+    const stored = await readFile(join(paths.assetsDirectory, added.people[0]!.oldPhotoFile));
+    // Library photos are served to end users; capture location must not ship.
+    expect(hasExifGpsData(stored)).toBe(false);
+    expect(readExifOrientation(stored)).toBe(6);
+    expect(stored.length).toBeLessThan(original.length);
+  });
+
+  it("拒绝 low 质量人脸入库", async () => {
+    const inputPhoto = join(root, "lowquality.jpg");
+    await writeFile(inputPhoto, jpegWithOrientation(200, 100, 1));
+    const faces = [{
+      faceId: "44444444-4444-4444-8444-444444444444",
+      faceRectangle: { left: 10, top: 10, width: 40, height: 40 },
+      qualityForRecognition: "low" as const,
+    }];
+    const client: PeopleAdminAzureClient = {
+      detect: vi.fn(async () => faces),
+      identify: vi.fn(), ensureGroup: vi.fn(), createPerson: vi.fn(), addFace: vi.fn(),
+      deleteFace: vi.fn(), deletePerson: vi.fn(), train: vi.fn(), waitForTraining: vi.fn(),
+    };
+    await expect(runPeopleAdmin([
+      "add", "--photo", inputPhoto, "--source-note", "全员已授权", "--member", "person-low:低质量:0",
+    ], paths, { write: (value) => outputs.push(value) }, { azureClient: client }))
+      .rejects.toThrow("high 或 medium");
+    expect(client.createPerson).not.toHaveBeenCalled();
   });
 
   it("几何校验拒绝零脸、跨脸和越界 faceIndex", () => {

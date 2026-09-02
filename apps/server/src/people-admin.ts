@@ -12,6 +12,11 @@ import { extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readConfig } from "./config.js";
 import {
+  orientationSwapsAxes,
+  readExifOrientation,
+  sanitizeJpegMetadata,
+} from "./exif.js";
+import {
   hasValidImageSignature,
   MAX_PHOTO_BYTES,
 } from "./photo-validation.js";
@@ -182,6 +187,22 @@ export function validateFaceBox(
   return selected.index;
 }
 
+/**
+ * Enrollment quality floor. Azure recommends "high" for enrollment, but
+ * "medium" faces still identify reliably enough for this library's group
+ * photos; "low" is always rejected. Confirmed for SVHWB-6.
+ */
+const acceptableEnrollmentQuality = new Set(["high", "medium"]);
+
+function assertEnrollmentQuality(
+  quality: string | undefined,
+  label: string,
+): void {
+  if (!quality || !acceptableEnrollmentQuality.has(quality)) {
+    throw new Error(`${label} 的识别质量为 ${quality ?? "未知"}，入库要求 high 或 medium`);
+  }
+}
+
 interface MemberInput {
   id: string;
   displayName: string;
@@ -200,7 +221,13 @@ function parseMember(value: string): MemberInput {
   return { id, displayName, faceIndex };
 }
 
-function getDimensions(
+/**
+ * Dimensions of the image as stored, ignoring Exif orientation.
+ *
+ * Callers that compare against Azure face rectangles want getDimensions()
+ * instead — Azure reports coordinates in the Exif-normalized frame.
+ */
+function getStoredDimensions(
   bytes: Buffer,
   mimeType: "image/jpeg" | "image/png" | "image/webp",
 ): { width: number; height: number } | undefined {
@@ -257,6 +284,25 @@ function getDimensions(
     }
   }
   return undefined;
+}
+
+/**
+ * Dimensions in the same frame Azure Face reports face rectangles in.
+ *
+ * Azure normalizes Exif orientation before detection, so a portrait photo
+ * stored as landscape (orientation 5-8) yields rectangles against the swapped
+ * frame. Validating those against the stored width/height rejects legitimate
+ * faces near the rotated edges, so the axes are swapped to match.
+ */
+export function getDimensions(
+  bytes: Buffer,
+  mimeType: "image/jpeg" | "image/png" | "image/webp",
+): { width: number; height: number } | undefined {
+  const stored = getStoredDimensions(bytes, mimeType);
+  if (!stored) return undefined;
+  if (mimeType !== "image/jpeg") return stored;
+  if (!orientationSwapsAxes(readExifOrientation(bytes))) return stored;
+  return { width: stored.height, height: stored.width };
 }
 
 async function rollbackCreated(client: PeopleAdminAzureClient, personIds: string[]): Promise<void> {
@@ -348,7 +394,11 @@ async function addPeople(
   const extension = extname(inputPhoto).toLowerCase();
   const mimeType = extensionMimeTypes[extension as keyof typeof extensionMimeTypes];
   if (!mimeType) throw new Error("照片只支持 JPEG、PNG 或 WebP");
-  const bytes = await readFile(inputPhoto);
+  const original = await readFile(inputPhoto);
+  // Library photos are served to end users, so capture metadata (GPS, time,
+  // device) must not be stored. Orientation is preserved; see sanitizeJpegMetadata.
+  const bytes = mimeType === "image/jpeg" ? sanitizeJpegMetadata(original) : original;
+  if (bytes !== original) original.fill(0);
   try {
     if (bytes.length > MAX_PHOTO_BYTES) throw new Error("照片不能超过 6 MiB");
     if (!hasValidImageSignature(bytes, mimeType)) throw new Error("照片内容与扩展名不匹配，或图片格式无效");
@@ -366,7 +416,7 @@ async function addPeople(
       for (const member of members) {
         const face = detectedFaces[member.faceIndex];
         if (!face) throw new Error(`faceIndex 越界：${member.faceIndex}`);
-        if (face.qualityForRecognition !== "high") throw new Error(`faceIndex ${member.faceIndex} 的识别质量不是 high`);
+        assertEnrollmentQuality(face.qualityForRecognition, `faceIndex ${member.faceIndex}`);
         validateFaceBox(face.faceRectangle, dimensions, detectedFaces);
       }
       if (authorization !== "authorized") throw new Error("real 模式合影必须取得全员 authorized 授权");
@@ -514,9 +564,10 @@ async function syncLibrary(
           for (const member of photo.members) {
             if (!member.faceBox) throw new Error(`sync 要求 faceBox：${photo.id}/${member.personId}`);
             const faceIndex = validateFaceBox(member.faceBox, dimensions, faces);
-            if (faces[faceIndex]?.qualityForRecognition !== "high") {
-              throw new Error(`sync 检测到低质量人脸：${photo.id}/${member.personId}`);
-            }
+            assertEnrollmentQuality(
+              faces[faceIndex]?.qualityForRecognition,
+              `${photo.id}/${member.personId}`,
+            );
             const personId = await client.createPerson(member.personId);
             createdIds.push(personId);
             const persistedFaceId = await client.addFace(personId, bytes, member.faceBox);
