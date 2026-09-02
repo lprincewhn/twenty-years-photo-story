@@ -14,9 +14,9 @@ const successResult: ExperienceResult = {
     confidence: "high",
     person: {
       id: "demo-xiaoxia",
-      displayName: "示例人物·小夏",
       oldPhotoUrl: "/api/people/demo-xiaoxia/photo",
       sourceNote: "项目自制几何插画，不构成真实人物资料。",
+      faceBox: { left: 0.2, top: 0.15, width: 0.3, height: 0.4 },
     },
   },
   differences: [
@@ -26,7 +26,7 @@ const successResult: ExperienceResult = {
   story: {
     label: "AI 创作/虚构",
     title: "一张虚构明信片",
-    content: "这是一则温暖的虚构故事。",
+    content: "这是一则跨越二十年的温暖虚构故事。",
     disclaimer: "本故事由 AI 虚构，不代表人物的真实经历。",
   },
 };
@@ -60,6 +60,14 @@ describe("移动端核心体验", () => {
     expect(screen.getAllByText(/AI 创作\/虚构/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("模拟匹配分数 94%")).toBeInTheDocument();
     expect(screen.getByText("结论阈值 82%")).toBeInTheDocument();
+    expect(screen.getByLabelText("匹配人物位置")).toHaveStyle({
+      left: "20%",
+      top: "15%",
+      width: "30%",
+      height: "40%",
+    });
+    expect(screen.queryByText("示例人物·小夏")).not.toBeInTheDocument();
+    expect(screen.getByText("这是一则跨越二十年的温暖虚构故事。")).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");
 
     await user.click(screen.getByRole("button", { name: "重新体验" }));

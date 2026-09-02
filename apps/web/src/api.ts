@@ -20,9 +20,14 @@ export interface ExperienceResult {
     confidence: "high" | "medium";
     person: {
       id: string;
-      displayName: string;
       oldPhotoUrl: string;
       sourceNote: string;
+      faceBox: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      } | null;
     };
   };
   differences: VisibleDifference[];
@@ -97,4 +102,3 @@ export const analyzePhoto: AnalyzePhoto = async (photo, consent, demoCase) => {
   }
   return payload as ExperienceResult;
 };
-

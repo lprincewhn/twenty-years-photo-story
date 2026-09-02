@@ -17,6 +17,12 @@ export interface PhotoInput {
   bytes: Buffer;
   mimeType: string;
   demoCase: DemoCase;
+  signal?: AbortSignal;
+}
+
+export interface ReferencePhotoInput {
+  bytes: Buffer;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
 }
 
 export interface MatchCandidate {
@@ -46,11 +52,14 @@ export interface FaceMatchProvider {
 }
 
 export interface DifferenceProvider {
-  analyze(photo: PhotoInput, personId: string): Promise<VisibleDifference[]>;
+  analyze(photo: PhotoInput, referencePhoto?: ReferencePhotoInput): Promise<VisibleDifference[]>;
 }
 
 export interface StoryProvider {
-  generate(displayName: string, differences: VisibleDifference[]): Promise<FictionStory>;
+  generate(
+    differences: VisibleDifference[],
+    signal?: AbortSignal,
+  ): Promise<FictionStory>;
 }
 
 export interface ProviderSet {
@@ -58,4 +67,3 @@ export interface ProviderSet {
   difference: DifferenceProvider;
   story: StoryProvider;
 }
-

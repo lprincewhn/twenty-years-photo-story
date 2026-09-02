@@ -3,7 +3,7 @@ import { readConfig } from "./config.js";
 import { createProviders } from "./providers/index.js";
 
 const config = readConfig();
-const providers = createProviders(config);
+const providers = await createProviders(config);
 const app = createApp({ config, providers });
 
 app.listen(config.port, config.host, () => {
