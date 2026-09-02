@@ -7,8 +7,9 @@
 - `FaceMatchProvider.match(photo)`：返回人脸数量和候选 `personId`/分数，不直接决定身份结论。
 - `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰枚举及客观描述。
 - `StoryProvider.generate(differences)`：返回固定 AI 标签、标题、正文和免责声明。
+- `NarrationProvider.synthesize(text)`：把故事标题和正文合成为浏览器可播放音频。
 
-`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Terra deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。
+`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Terra deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 可独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。
 
 ## Azure Face adapter
 

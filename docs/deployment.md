@@ -32,9 +32,15 @@ MATCH_THRESHOLD=0.6
 ALLOWED_ORIGIN=https://photo.example.com
 PEOPLE_ASSET_SECRET=使用秘密管理生成并注入的至少32字符随机值
 GRANT_TTL_SECONDS=300
+AZURE_SPEECH_ENDPOINT=https://svhw2-southeastaisa.cognitiveservices.azure.com/
+AZURE_SPEECH_RESOURCE_ID=/subscriptions/10564893-ecc3-4a6d-b505-53bcbe89dd8e/resourceGroups/jump-server_group/providers/Microsoft.CognitiveServices/accounts/svhw2-southeastaisa
+AZURE_SPEECH_VOICE=zh-CN-XiaoxiaoNeural
+AZURE_SPEECH_STYLE=affectionate
 ```
 
 演示环境可使用 mock。real 模式使用 Azure Face 完成人物匹配，并使用 Microsoft Foundry GPT-5.6 Terra 完成可见差异分析与虚构故事生成；任一 provider 配置不完整都会拒绝启动或明确返回 `PROVIDER_UNAVAILABLE`，绝不回落到 mock。
+
+Azure Speech 可独立接入：`AZURE_SPEECH_ENDPOINT` 与 `AZURE_SPEECH_RESOURCE_ID` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。Speech 通过 `DefaultAzureCredential` 获取 `https://cognitiveservices.azure.com/.default` Token，不使用资源 Key。目标身份须在资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor`。
 
 Azure Face **只能通过 Entra ID / Managed Identity** 使用，不配置 API key。本地维护使用 `az login`，生产进程启用系统或用户指派 MI；运行时和人物入库脚本统一在 Face 资源范围授予 **Cognitive Services Face Contributor**。`Cognitive Services Face Recognizer` 不包含 LargePersonGroup 管理权限，不能用于本部署。授权后 RBAC 可能传播数分钟，启动自检会以 5 次、每次 6 秒重试 401/传播期 `PermissionDenied`。
 

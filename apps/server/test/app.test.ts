@@ -15,6 +15,7 @@ const config: AppConfig = {
   allowedOrigin: "http://localhost:5173",
   peopleAssetSecret: "test-secret-that-is-at-least-32-characters",
   grantTtlSeconds: 300,
+  speech: { mode: "mock" },
 };
 const validJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
 
@@ -180,6 +181,11 @@ describe("照片故事 API", () => {
     });
     expect(response.body.differences).toHaveLength(4);
     expect(response.body.story.label).toBe("AI 创作/虚构");
+    expect(response.body.narration).toMatchObject({
+      mimeType: "audio/wav",
+      provider: "mock",
+    });
+    expect(response.body.narration.audioBase64).toBeTruthy();
     expect(response.body.retention).toContain("不落盘");
     expect(response.body.match.person.oldPhotoUrl).toBe(
       "/api/people/demo-xiaoxia/photo",

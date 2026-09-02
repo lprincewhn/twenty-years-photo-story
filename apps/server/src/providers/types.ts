@@ -47,6 +47,12 @@ export interface FictionStory {
   disclaimer: string;
 }
 
+export interface Narration {
+  mimeType: "audio/mpeg" | "audio/wav";
+  audioBase64: string;
+  provider: "azure-speech" | "mock";
+}
+
 export interface FaceMatchProvider {
   match(photo: PhotoInput): Promise<FaceMatchOutput>;
 }
@@ -62,8 +68,13 @@ export interface StoryProvider {
   ): Promise<FictionStory>;
 }
 
+export interface NarrationProvider {
+  synthesize(text: string): Promise<Narration>;
+}
+
 export interface ProviderSet {
   faceMatch: FaceMatchProvider;
   difference: DifferenceProvider;
   story: StoryProvider;
+  narration: NarrationProvider;
 }

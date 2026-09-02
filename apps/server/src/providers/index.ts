@@ -1,4 +1,5 @@
 import type { AppConfig } from "../config.js";
+import { AzureSpeechProvider } from "./azure-speech.js";
 import { AppError } from "../errors.js";
 import { loadPeopleLibrary } from "../people.js";
 import { AzureFaceClient, AzureFaceMatchProvider } from "./azure-face.js";
@@ -7,12 +8,16 @@ import {
   AzureFoundryDifferenceProvider,
   AzureFoundryStoryProvider,
 } from "./azure-foundry.js";
-import { createMockProviders } from "./mock.js";
+import { createMockProviders, MockNarrationProvider } from "./mock.js";
 import type { ProviderSet } from "./types.js";
 
 export async function createProviders(config: AppConfig): Promise<ProviderSet> {
   if (config.providerMode === "mock") {
-    return createMockProviders();
+    const providers = createMockProviders();
+    if (config.speech.mode === "azure") {
+      providers.narration = new AzureSpeechProvider(config.speech);
+    }
+    return providers;
   }
   if (!config.azureFace || !config.azureFoundry) {
     throw new AppError(
@@ -31,5 +36,9 @@ export async function createProviders(config: AppConfig): Promise<ProviderSet> {
     faceMatch: new AzureFaceMatchProvider(faceClient, library),
     difference: new AzureFoundryDifferenceProvider(foundryClient),
     story: new AzureFoundryStoryProvider(foundryClient),
+    narration:
+      config.speech.mode === "azure"
+        ? new AzureSpeechProvider(config.speech)
+        : new MockNarrationProvider(),
   };
 }
