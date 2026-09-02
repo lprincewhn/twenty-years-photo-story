@@ -42,26 +42,44 @@ describe("mock provider", () => {
 
   it("使用 Azure Speech 情感样式合成 MP3 并转义故事文本", async () => {
     let requestBody = "";
-    const fetchMock = async (_input: string | URL | Request, init?: RequestInit) => {
+    let requestUrl = "";
+    let requestHeaders: Headers;
+    const fetchMock = async (input: string | URL | Request, init?: RequestInit) => {
+      requestUrl = String(input);
+      requestHeaders = new Headers(init?.headers);
       requestBody = String(init?.body);
       return new Response(Buffer.from("mock-mp3"), { status: 200 });
+    };
+    const credential = {
+      getToken: async (scope: string) => {
+        expect(scope).toBe("https://cognitiveservices.azure.com/.default");
+        return { token: "entra-token" };
+      },
     };
     const provider = new AzureSpeechProvider(
       {
         mode: "azure",
-        key: "secret",
-        region: "chinaeast2",
+        endpoint: "https://svhw2-southeastaisa.cognitiveservices.azure.com/",
+        resourceId:
+          "/subscriptions/10564893-ecc3-4a6d-b505-53bcbe89dd8e/resourceGroups/jump-server_group/providers/Microsoft.CognitiveServices/accounts/svhw2-southeastaisa",
         voice: "zh-CN-XiaoxiaoNeural",
         style: "affectionate",
       },
       fetchMock,
+      credential,
     );
 
     const narration = await provider.synthesize("温柔地说：你 & 我 <二十年>");
 
+    expect(requestUrl).toBe(
+      "https://svhw2-southeastaisa.cognitiveservices.azure.com/tts/cognitiveservices/v1",
+    );
+    expect(requestHeaders!.get("authorization")).toBe(
+      "Bearer aad#/subscriptions/10564893-ecc3-4a6d-b505-53bcbe89dd8e/resourceGroups/jump-server_group/providers/Microsoft.CognitiveServices/accounts/svhw2-southeastaisa#entra-token",
+    );
+    expect(requestHeaders!.has("ocp-apim-subscription-key")).toBe(false);
     expect(requestBody).toContain('style="affectionate"');
     expect(requestBody).toContain("你 &amp; 我 &lt;二十年&gt;");
-    expect(requestBody).not.toContain("secret");
     expect(narration).toEqual({
       mimeType: "audio/mpeg",
       audioBase64: Buffer.from("mock-mp3").toString("base64"),

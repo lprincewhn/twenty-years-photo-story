@@ -32,13 +32,13 @@ MATCH_THRESHOLD=0.82
 ALLOWED_ORIGIN=https://photo.example.com
 PEOPLE_ASSET_SECRET=使用秘密管理生成并注入的至少32字符随机值
 GRANT_TTL_SECONDS=300
-AZURE_SPEECH_KEY=通过秘密管理注入
-AZURE_SPEECH_REGION=chinaeast2
+AZURE_SPEECH_ENDPOINT=https://svhw2-southeastaisa.cognitiveservices.azure.com/
+AZURE_SPEECH_RESOURCE_ID=/subscriptions/10564893-ecc3-4a6d-b505-53bcbe89dd8e/resourceGroups/jump-server_group/providers/Microsoft.CognitiveServices/accounts/svhw2-southeastaisa
 AZURE_SPEECH_VOICE=zh-CN-XiaoxiaoNeural
 AZURE_SPEECH_STYLE=affectionate
 ```
 
-演示环境可使用 mock。Azure Speech 可独立接入：`AZURE_SPEECH_KEY` 与 `AZURE_SPEECH_REGION` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。生产真实分析能力上线前必须实现并评审三个分析 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。密钥通过云秘密管理注入，仅服务端进程可读；不得写入镜像、构建参数、静态资源或日志。
+演示环境可使用 mock。Azure Speech 可独立接入：`AZURE_SPEECH_ENDPOINT` 与 `AZURE_SPEECH_RESOURCE_ID` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。Speech 通过 `DefaultAzureCredential` 获取 `https://cognitiveservices.azure.com/.default` Token，不使用资源 Key。本地先执行 `az login --tenant 16b3c013-d300-468d-ac64-7eda0820b6d3` 并选择 MCAPS 订阅；目标身份须在资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor`。生产真实分析能力上线前必须实现并评审三个分析 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。
 
 ## 反向代理要求
 

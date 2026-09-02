@@ -9,7 +9,7 @@
 - `StoryProvider.generate(displayName, differences)`：返回固定 AI 标签、标题、正文和免责声明。
 - `NarrationProvider.synthesize(text)`：把故事标题和正文合成为浏览器可播放音频。
 
-`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行；配置 Azure Speech 密钥和区域后，朗读 provider 独立切换为 Azure 情感语音。`real` 在没有明确分析适配器时会拒绝启动，避免误把 mock 当成真实分析。
+`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行；配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。目标资源必须启用自定义子域，调用身份必须具备 Speech User 或 Contributor RBAC 角色。`real` 在没有明确分析适配器时会拒绝启动，避免误把 mock 当成真实分析。
 
 ## 新增真实适配器
 

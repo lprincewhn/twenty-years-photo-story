@@ -60,12 +60,12 @@ npm run dev
 | `PROVIDER_MODE` | `mock` | `mock` 可直接演示；`real` 需先实现适配器 |
 | `MATCH_THRESHOLD` | `0.82` | 服务端匹配阈值，允许 0.50～0.99 |
 | `ALLOWED_ORIGIN` | `http://localhost:5173` | 允许的前端来源 |
-| `AZURE_SPEECH_KEY` | 未设置 | Azure Speech 服务端密钥；与 Region 同时配置 |
-| `AZURE_SPEECH_REGION` | 未设置 | Azure Speech 区域，如 `chinaeast2` |
+| `AZURE_SPEECH_ENDPOINT` | 未设置 | Azure Speech 自定义终结点；与 Resource ID 同时配置 |
+| `AZURE_SPEECH_RESOURCE_ID` | 未设置 | Speech 资源的完整 Azure Resource ID |
 | `AZURE_SPEECH_VOICE` | `zh-CN-XiaoxiaoNeural` | 中文神经语音 |
 | `AZURE_SPEECH_STYLE` | `affectionate` | Azure 情感朗读样式 |
 
-真实 provider 密钥只能配置在服务端秘密管理中，不能带 `VITE_` 前缀、不能写入前端、不能提交。`.env.example` 只有变量占位说明，不含真实密钥。
+Speech 使用 `DefaultAzureCredential` 完成 Entra ID 鉴权，不读取资源密钥。本地进程可复用 `az login`，Azure 主机可使用托管身份，自动化环境可注入服务主体。调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。其他真实 provider 密钥只能配置在服务端秘密管理中，不能带 `VITE_` 前缀、不能写入前端、不能提交。
 
 ## 人物库准备
 
