@@ -9,34 +9,6 @@ import type {
   VisibleDifference,
 } from "./types.js";
 
-interface StoryVariant {
-  title: string;
-  createContent: (displayName: string, details: string[]) => string;
-}
-
-const storyVariants: readonly StoryVariant[] = [
-  {
-    title: "寄给二十年后的一张明信片",
-    createContent: (displayName, details) =>
-      `${displayName}在虚构的午后翻开旧相册。${details[0]} ${details[1]} 照片之间仿佛夹着一张未寄出的明信片，提醒人们珍惜每一次真诚的笑容。`,
-  },
-  {
-    title: "相册里的两束光",
-    createContent: (displayName, details) =>
-      `在这则虚构故事里，两束相隔多年的光落在${displayName}的照片上。${details[1]} ${details[2]} 时间改变了画面里的细节，却把熟悉的从容悄悄留了下来。`,
-  },
-  {
-    title: "旧照片醒来的清晨",
-    createContent: (displayName, details) =>
-      `假如旧照片会说话，它会在清晨向${displayName}讲起那天的风。${details[2]} ${details[3]} 新旧画面隔着岁月相望，共同收藏了一个温柔的瞬间。`,
-  },
-  {
-    title: "跨越时光的合影",
-    createContent: (displayName, details) =>
-      `${displayName}在虚构的时光车站遇见了照片里的自己。${details[3]} ${details[0]} 两个身影并肩停留片刻，又带着各自的笑意走向下一段旅程。`,
-  },
-] as const;
-
 function failWhenRequested(photo: PhotoInput): void {
   if (photo.demoCase === "provider-error") {
     throw new AppError(
@@ -83,28 +55,15 @@ export class MockDifferenceProvider implements DifferenceProvider {
 }
 
 export class MockStoryProvider implements StoryProvider {
-  private nextVariantIndex = 0;
-
   async generate(
     displayName: string,
     differences: VisibleDifference[],
   ): Promise<FictionStory> {
-    const details = differences.map((item) => item.description);
-    const fallbackDetail = "照片保留了自然、温暖的瞬间。";
-    const paddedDetails = Array.from(
-      { length: 4 },
-      (_, index) => details[index % Math.max(details.length, 1)] ?? fallbackDetail,
-    );
-    const variant = storyVariants[this.nextVariantIndex];
-    if (!variant) {
-      throw new Error("mock 故事模板配置无效");
-    }
-    this.nextVariantIndex = (this.nextVariantIndex + 1) % storyVariants.length;
-
+    const details = differences.slice(0, 2).map((item) => item.description).join(" ");
     return {
       label: "AI 创作/虚构",
-      title: variant.title,
-      content: variant.createContent(displayName, paddedDetails),
+      title: "寄给二十年后的一张明信片",
+      content: `${displayName}在虚构的午后翻开旧相册。${details} 照片之间仿佛夹着一张未寄出的明信片，提醒人们珍惜每一次真诚的笑容。`,
       disclaimer: "本故事由 AI 根据可见元素虚构，不代表人物的真实经历。",
     };
   }

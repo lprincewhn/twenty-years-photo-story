@@ -37,7 +37,7 @@ SVHW-16 的可运行移动端 H5 MVP：用户明确授权后拍摄或选择当�
 - `apps/web`：React 19、Vite、原生 CSS
 - `apps/server`：Express 5、Multer 内存上传、可注入 provider
 - `specs/001-photo-story-mvp`：Spec Kit 规范、计划、任务、研究、数据模型、契约和快速开始
-- `docs`：接口、部署、人物库与维护说明
+- `docs`：接口、部署、人物库、维护说明与 GPT 故事提示词
 
 ## 本地运行
 
