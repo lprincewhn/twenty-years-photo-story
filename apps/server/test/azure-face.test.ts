@@ -127,6 +127,27 @@ describe("Azure Face adapter", () => {
     expect(calls).toBe(3);
   });
 
+  it("启动自检显式请求 recognitionModel", async () => {
+    // Azure leaves recognitionModel out of the group response unless it is asked
+    // for, so without the flag the model check below always fails and real mode
+    // can never start.
+    const urls: string[] = [];
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("/training")) return json({ status: "succeeded" });
+      return json(url.includes("returnRecognitionModel=true")
+        ? { recognitionModel: "recognition_04" }
+        : { largePersonGroupId: "group", name: "group" });
+    });
+    const client = new AzureFaceClient(config, {
+      credential,
+      fetch: fetch as typeof globalThis.fetch,
+    });
+    await expect(client.selfCheck(1, 0)).resolves.toBeUndefined();
+    expect(urls[0]).toContain("returnRecognitionModel=true");
+  });
+
   it.each([
     [{ recognitionModel: "recognition_03" }, { status: "succeeded" }],
     [{ recognitionModel: "recognition_04" }, { status: "running" }],

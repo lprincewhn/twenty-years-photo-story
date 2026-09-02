@@ -233,7 +233,13 @@ export class AzureFaceClient {
     let group: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        group = await this.request(`largepersongroups/${encodeURIComponent(this.config.groupId)}`);
+        // Azure omits recognitionModel unless it is explicitly requested, and the
+        // check below compares it against the configured model.
+        group = await this.request(
+          `largepersongroups/${encodeURIComponent(this.config.groupId)}`,
+          {},
+          { returnRecognitionModel: true },
+        );
         break;
       } catch (error) {
         if (
