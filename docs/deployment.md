@@ -28,13 +28,33 @@ NODE_ENV=production
 HOST=127.0.0.1
 PORT=3000
 PROVIDER_MODE=mock
-MATCH_THRESHOLD=0.82
+MATCH_THRESHOLD=0.6
 ALLOWED_ORIGIN=https://photo.example.com
 PEOPLE_ASSET_SECRET=使用秘密管理生成并注入的至少32字符随机值
 GRANT_TTL_SECONDS=300
 ```
 
-演示环境可使用 mock。生产真实能力上线前必须实现并评审三个 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。密钥通过云秘密管理注入，仅服务端进程可读；不得写入镜像、构建参数、静态资源或日志。
+演示环境可使用 mock。Azure Face 已接入 real 模式；差异分析和故事 provider 尚无真实实现，二者会明确返回 `PROVIDER_UNAVAILABLE`，绝不回落到 mock。全部真实 provider 配齐并评审前，不应把 real 模式作为完整用户流程上线。
+
+Azure Face **只能通过 Entra ID / Managed Identity** 使用，不配置 API key。本地维护使用 `az login`，生产进程启用系统或用户指派 MI；运行时和人物入库脚本统一在 Face 资源范围授予 **Cognitive Services Face Contributor**。`Cognitive Services Face Recognizer` 不包含 LargePersonGroup 管理权限，不能用于本部署。授权后 RBAC 可能传播数分钟，启动自检会以 5 次、每次 6 秒重试 401/传播期 `PermissionDenied`。
+
+real 模式服务端配置：
+
+```text
+PROVIDER_MODE=real
+MATCH_THRESHOLD=0.6
+AZURE_FACE_ENDPOINT=https://<resource>.cognitiveservices.azure.com
+AZURE_FACE_API_VERSION=v1.2
+AZURE_FACE_GROUP_ID=photo-story-people
+AZURE_FACE_DETECTION_MODEL=detection_03
+AZURE_FACE_RECOGNITION_MODEL=recognition_04
+AZURE_FACE_ID_TTL_SECONDS=60
+AZURE_FACE_IDENTIFY_THRESHOLD=0.5
+AZURE_FACE_MAX_CANDIDATES=5
+AZURE_FACE_TIMEOUT_MS=8000
+```
+
+用户指派 MI 另设 `AZURE_CLIENT_ID`。`AZURE_FACE_IDENTIFY_THRESHOLD` 必须严格小于 `MATCH_THRESHOLD`。这些变量均不得使用 `VITE_` 前缀。进程启动会读取容器及训练状态并校验 `recognition_04`；失败即拒绝启动，不静默降级。
 
 ## 反向代理要求
 
@@ -52,6 +72,7 @@ GRANT_TTL_SECONDS=300
 - 不挂载上传卷，不创建照片缓存目录。
 - 禁用包含进程内存的自动崩溃转储；评估交换空间和 APM 请求体采集。
 - APM、WAF、反向代理均禁用请求/响应体采样。
+- 人脸模板持久化在 Azure Face（southeastasia）。授权文案必须写明目的、保留期限、撤回渠道以及撤回后 30 天内删除并重训生效的承诺。
 - 真实供应商必须承诺不训练、最短保留与可验证删除，并限定处理地域。
 - 只保留匿名运行指标；任何新增持久化必须重新取得用户授权并更新文档。
 
@@ -81,4 +102,4 @@ curl -I https://photo.example.com/
 
 ## 回滚
 
-静态站与 API 使用可追踪版本镜像。回滚时同时回退前端与 API 契约兼容版本；本 MVP 无数据库迁移。发生疑似照片泄露时应立即停止入口、关闭可能采集请求体的日志/APM、轮换 provider 密钥并按事件响应流程通知负责人。
+静态站与 API 使用可追踪版本镜像。回滚时同时回退前端与 API 契约兼容版本；本 MVP 无数据库迁移。发生疑似照片泄露时应立即停止入口、关闭可能采集请求体的日志/APM、撤销或更换托管身份并按事件响应流程通知负责人。

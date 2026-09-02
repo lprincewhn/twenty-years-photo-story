@@ -17,7 +17,7 @@ import {
   MAX_PHOTO_BYTES,
   supportedPhotoMimeTypes,
 } from "./photo-validation.js";
-import { loadPeople } from "./people.js";
+import { isPhotoFullyAuthorized, loadPeopleLibrary, resolvePeople } from "./people.js";
 import {
   allowedDifferenceCategories,
   type DemoCase,
@@ -159,7 +159,8 @@ function sendError(response: Response, error: AppError): void {
 
 export function createApp({ config, providers }: AppDependencies) {
   const app = express();
-  const people = loadPeople();
+  const peopleLibrary = loadPeopleLibrary();
+  const people = resolvePeople(peopleLibrary);
   const upload = multer({
     storage: zeroingMemoryStorage(),
     limits: {
@@ -230,6 +231,18 @@ export function createApp({ config, providers }: AppDependencies) {
         "PERSON_PHOTO_NOT_FOUND",
         "人物照片不存在",
         "该人物照片不存在或已撤回。",
+        false,
+      );
+    }
+    if (
+      config.providerMode === "real" &&
+      !isPhotoFullyAuthorized(peopleLibrary, person.photoId)
+    ) {
+      throw new AppError(
+        404,
+        "PERSON_PHOTO_NOT_FOUND",
+        "人物照片不存在",
+        "该合影尚未取得全员授权或已有人撤回授权。",
         false,
       );
     }
@@ -318,6 +331,7 @@ export function createApp({ config, providers }: AppDependencies) {
           bytes,
           mimeType: request.file.mimetype,
           demoCase,
+          signal: AbortSignal.timeout(30_000),
         };
 
         try {
@@ -345,7 +359,8 @@ export function createApp({ config, providers }: AppDependencies) {
           const person = people.find((entry) => entry.id === candidate.personId);
           if (
             !person ||
-            (config.providerMode === "real" && person.authorization !== "authorized")
+            (config.providerMode === "real" &&
+              !isPhotoFullyAuthorized(peopleLibrary, person.photoId))
           ) {
             throw new Error("provider 候选不在授权人物库");
           }

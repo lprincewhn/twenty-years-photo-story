@@ -17,6 +17,7 @@ export interface PhotoInput {
   bytes: Buffer;
   mimeType: string;
   demoCase: DemoCase;
+  signal?: AbortSignal;
 }
 
 export interface MatchCandidate {
@@ -58,4 +59,3 @@ export interface ProviderSet {
   difference: DifferenceProvider;
   story: StoryProvider;
 }
-
