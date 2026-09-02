@@ -1,5 +1,4 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { extname, resolve, sep } from "node:path";
@@ -11,6 +10,7 @@ import express, {
 } from "express";
 import { rateLimit } from "express-rate-limit";
 import multer from "multer";
+import sharp from "sharp";
 import type { AppConfig } from "./config.js";
 import { AppError, faceCountError } from "./errors.js";
 import {
@@ -18,7 +18,13 @@ import {
   MAX_PHOTO_BYTES,
   supportedPhotoMimeTypes,
 } from "./photo-validation.js";
-import { isPhotoFullyAuthorized, loadPeopleLibrary, resolvePeople } from "./people.js";
+import {
+  isPhotoFullyAuthorized,
+  loadPeopleLibrary,
+  resolvePeople,
+  resolvePeopleLibraryPaths,
+  type FaceBox,
+} from "./people.js";
 import {
   allowedDifferenceCategories,
   type DemoCase,
@@ -26,14 +32,7 @@ import {
   type ProviderSet,
 } from "./providers/types.js";
 
-// The real asset directory is untracked, so fall back to the committed demo
-// assets when it is absent (fresh clone). Keep this in step with
-// loadPeopleLibrary, which resolves the matching people.json the same way.
-const peopleAssetsDirectory = fileURLToPath(
-  existsSync(new URL("./assets/people", import.meta.url))
-    ? new URL("./assets/people", import.meta.url)
-    : new URL("./seed/assets/people", import.meta.url),
-);
+const peopleAssetsDirectory = fileURLToPath(resolvePeopleLibraryPaths().assetsDirectory);
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const photoContentTypes: Readonly<Record<string, string>> = {
   ".jpeg": "image/jpeg",
@@ -177,6 +176,23 @@ function normalizeFaceBox(
     width: faceBox.width / photoWidth,
     height: faceBox.height / photoHeight,
   };
+}
+
+async function cropMatchedPerson(
+  bytes: Buffer,
+  faceBox: FaceBox,
+  photoWidth: number,
+  photoHeight: number,
+): Promise<Buffer> {
+  const left = Math.max(0, faceBox.left - Math.floor(faceBox.width / 2));
+  const top = Math.max(0, faceBox.top - Math.floor(faceBox.height / 2));
+  const right = Math.min(photoWidth, faceBox.left + Math.ceil(faceBox.width * 1.5));
+  const bottom = Math.min(photoHeight, faceBox.top + faceBox.height * 3);
+  return sharp(bytes)
+    .rotate()
+    .extract({ left, top, width: right - left, height: bottom - top })
+    .jpeg({ quality: 90 })
+    .toBuffer();
 }
 
 export function createApp({ config, providers }: AppDependencies) {
@@ -396,12 +412,23 @@ export function createApp({ config, providers }: AppDependencies) {
               throw new Error("人物照片路径无效");
             }
             const referenceBytes = await readFile(referencePath);
+            let matchedPersonBytes: Buffer | undefined;
             try {
+              if (!person.faceBox || !person.photoWidth || !person.photoHeight) {
+                throw new Error("real provider 的人物照片缺少 faceBox 或宽高");
+              }
+              matchedPersonBytes = await cropMatchedPerson(
+                referenceBytes,
+                person.faceBox,
+                person.photoWidth,
+                person.photoHeight,
+              );
               rawDifferences = await providers.difference.analyze(photo, {
-                bytes: referenceBytes,
-                mimeType: person.photoMimeType,
+                bytes: matchedPersonBytes,
+                mimeType: "image/jpeg",
               });
             } finally {
+              matchedPersonBytes?.fill(0);
               referenceBytes.fill(0);
             }
           } else {

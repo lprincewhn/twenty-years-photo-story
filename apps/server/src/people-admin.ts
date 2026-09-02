@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 import { readConfig } from "./config.js";
 import {
   orientationSwapsAxes,
@@ -108,6 +109,17 @@ async function removeIfExists(path: string): Promise<void> {
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
+}
+
+async function sanitizeLibraryPhoto(
+  bytes: Buffer,
+  mimeType: "image/jpeg" | "image/png" | "image/webp",
+): Promise<Buffer> {
+  if (mimeType === "image/jpeg") return sanitizeJpegMetadata(bytes);
+  const image = sharp(bytes, { failOn: "warning" }).rotate();
+  return mimeType === "image/png"
+    ? image.png().toBuffer()
+    : image.webp().toBuffer();
 }
 
 async function readLibrary(path: string): Promise<PeopleLibrary> {
@@ -395,9 +407,7 @@ async function addPeople(
   const mimeType = extensionMimeTypes[extension as keyof typeof extensionMimeTypes];
   if (!mimeType) throw new Error("照片只支持 JPEG、PNG 或 WebP");
   const original = await readFile(inputPhoto);
-  // Library photos are served to end users, so capture metadata (GPS, time,
-  // device) must not be stored. Orientation is preserved; see sanitizeJpegMetadata.
-  const bytes = mimeType === "image/jpeg" ? sanitizeJpegMetadata(original) : original;
+  const bytes = await sanitizeLibraryPhoto(original, mimeType);
   if (bytes !== original) original.fill(0);
   try {
     if (bytes.length > MAX_PHOTO_BYTES) throw new Error("照片不能超过 6 MiB");
@@ -509,31 +519,33 @@ async function deletePerson(
     const person = resolvePeople(library).find((entry) => entry.id === id);
     if (!person) throw new Error(`人物不存在：${id}`);
     const photo = library.photos.find((entry) => entry.id === person.photoId)!;
-    const member = photo.members.find((entry) => entry.personId === id)!;
-    if (person.azurePersonId || member.azurePersistedFaceId) {
+    const photoPeople = resolvePeople(library).filter((entry) => entry.photoId === photo.id);
+    if (photoPeople.some((entry) => entry.azurePersonId)) {
       if (!client) throw new Error("删除 Azure 人脸模板需要 PROVIDER_MODE=real 的 Azure Face 配置");
-      if (person.azurePersonId && member.azurePersistedFaceId) {
-        await client.deleteFace(person.azurePersonId, member.azurePersistedFaceId);
+      for (const photoPerson of photoPeople) {
+        const member = photo.members.find((entry) => entry.personId === photoPerson.id)!;
+        if (photoPerson.azurePersonId && member.azurePersistedFaceId) {
+          await client.deleteFace(photoPerson.azurePersonId, member.azurePersistedFaceId);
+        }
+        if (photoPerson.azurePersonId) await client.deletePerson(photoPerson.azurePersonId);
       }
-      if (person.azurePersonId) await client.deletePerson(person.azurePersonId);
+    }
+    const removedPersonIds = new Set(photoPeople.map((entry) => entry.id));
+    const next = parsePeopleLibrary({
+      ...library,
+      people: library.people.filter((entry) => !removedPersonIds.has(entry.id)),
+      photos: library.photos.filter((entry) => entry.id !== photo.id),
+    });
+    await writeLibrary(paths.peopleFile, next);
+    await removeIfExists(resolve(paths.assetsDirectory, photo.file));
+    if (client && photoPeople.some((entry) => entry.azurePersonId)) {
       try {
         await train(client);
       } catch {
-        throw new Error("Azure 侧删除已提交，但重训失败，删除尚未对 Identify 生效；请运行 sync 修复");
+        throw new Error("本地照片与成员已撤回，但 Azure 重训失败；请运行 sync 完成远端修复");
       }
     }
-    const remainingMembers = photo.members.filter((entry) => entry.personId !== id);
-    const photoDeleted = remainingMembers.length === 0;
-    const next = parsePeopleLibrary({
-      ...library,
-      people: library.people.filter((entry) => entry.id !== id),
-      photos: photoDeleted
-        ? library.photos.filter((entry) => entry.id !== photo.id)
-        : library.photos.map((entry) => entry.id === photo.id ? { ...entry, members: remainingMembers } : entry),
-    });
-    await writeLibrary(paths.peopleFile, next);
-    if (photoDeleted) await removeIfExists(resolve(paths.assetsDirectory, photo.file));
-    return { action: "deleted", person, photoDeleted };
+    return { action: "deleted", person, photoDeleted: true };
   });
 }
 

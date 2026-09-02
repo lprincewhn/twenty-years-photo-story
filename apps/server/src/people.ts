@@ -212,17 +212,28 @@ export function parsePeople(input: unknown): ResolvedPersonEntry[] {
   return resolvePeople(parsePeopleLibrary(input));
 }
 
-const peoplePath = new URL("./people.json", import.meta.url);
-/**
- * Committed demo library. Real people.json is untracked (it holds authorized
- * photos and face coordinates), so a fresh clone has none — without this
- * fallback the app cannot start and most tests fail.
- */
+const realPeoplePath = new URL("./people.json", import.meta.url);
+const realAssetsDirectory = new URL("./assets/people", import.meta.url);
 const seedPeoplePath = new URL("./seed/people.json", import.meta.url);
+const seedAssetsDirectory = new URL("./seed/assets/people", import.meta.url);
+
+export function resolvePeopleLibraryPaths(): {
+  peoplePath: URL;
+  assetsDirectory: URL;
+} {
+  const hasRealPeople = existsSync(realPeoplePath);
+  const hasRealAssets = existsSync(realAssetsDirectory);
+  if (hasRealPeople !== hasRealAssets) {
+    throw new Error("人物库不完整：people.json 与 assets/people 必须同时存在或同时缺失");
+  }
+  return hasRealPeople
+    ? { peoplePath: realPeoplePath, assetsDirectory: realAssetsDirectory }
+    : { peoplePath: seedPeoplePath, assetsDirectory: seedAssetsDirectory };
+}
 
 export function loadPeopleLibrary(): PeopleLibrary {
-  const path = existsSync(peoplePath) ? peoplePath : seedPeoplePath;
-  return parsePeopleLibrary(JSON.parse(readFileSync(path, "utf8")));
+  const { peoplePath } = resolvePeopleLibraryPaths();
+  return parsePeopleLibrary(JSON.parse(readFileSync(peoplePath, "utf8")));
 }
 
 export function loadPeople(): ResolvedPersonEntry[] {

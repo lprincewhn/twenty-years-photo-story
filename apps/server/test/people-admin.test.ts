@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 import { hasExifGpsData, readExifOrientation } from "../src/exif.js";
 import {
   runPeopleAdmin,
@@ -12,13 +13,15 @@ import {
 import { parsePeopleLibrary } from "../src/people.js";
 
 const validJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
-function pngHeader(width: number, height: number): Buffer {
-  const buffer = Buffer.alloc(24);
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(buffer);
-  buffer.write("IHDR", 12, "ascii");
-  buffer.writeUInt32BE(width, 16);
-  buffer.writeUInt32BE(height, 20);
-  return buffer;
+function pngImage(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  }).png().toBuffer();
 }
 
 /**
@@ -109,7 +112,7 @@ describe("人物库管理脚本", () => {
 
   it("累积多个 --member，按 faceIndex 入库并执行训练和自检", async () => {
     const inputPhoto = join(root, "group.png");
-    await writeFile(inputPhoto, pngHeader(200, 100));
+    await writeFile(inputPhoto, await pngImage(200, 100));
     const faces = [
       { faceId: "11111111-1111-4111-8111-111111111111", faceRectangle: { left: 10, top: 10, width: 40, height: 40 }, qualityForRecognition: "high" as const },
       { faceId: "22222222-2222-4222-8222-222222222222", faceRectangle: { left: 120, top: 10, width: 40, height: 40 }, qualityForRecognition: "high" as const },
@@ -241,7 +244,7 @@ describe("人物库管理脚本", () => {
       .toThrow();
   });
 
-  it("删除共享照片中的一个成员时保留照片", async () => {
+  it("任一成员撤回时删除整张共享照片及其全部成员", async () => {
     const photo = join(paths.assetsDirectory, "shared.jpg");
     await writeFile(photo, validJpeg);
     await writeFile(paths.peopleFile, JSON.stringify({
@@ -259,13 +262,16 @@ describe("人物库管理脚本", () => {
       ],
     }));
     await runPeopleAdmin(["delete", "a"], paths, { write: (value) => outputs.push(value) });
-    expect(outputs[0]).toMatchObject({ photoDeleted: false });
-    expect(await readFile(photo)).toEqual(validJpeg);
+    expect(outputs[0]).toMatchObject({ photoDeleted: true });
+    const library = parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8")));
+    expect(library.people).toEqual([]);
+    expect(library.photos).toEqual([]);
+    await expect(readFile(photo)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("入库后自检按 10 张脸分批", async () => {
     const inputPhoto = join(root, "eleven.png");
-    await writeFile(inputPhoto, pngHeader(240, 30));
+    await writeFile(inputPhoto, await pngImage(240, 30));
     const faces = Array.from({ length: 11 }, (_, index) => ({
       faceId: `10000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       faceRectangle: { left: index * 20, top: 5, width: 10, height: 10 },
@@ -303,7 +309,7 @@ describe("人物库管理脚本", () => {
 
   it("自检失败时回滚本轮 Azure person 且不写本地", async () => {
     const inputPhoto = join(root, "one.png");
-    await writeFile(inputPhoto, pngHeader(100, 100));
+    await writeFile(inputPhoto, await pngImage(100, 100));
     const personId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const deletePerson = vi.fn(async () => undefined);
     const client: PeopleAdminAzureClient = {
@@ -331,7 +337,7 @@ describe("人物库管理脚本", () => {
     expect(parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8"))).people).toEqual([]);
   });
 
-  it("删除后重训失败时命令失败且不声称本地删除完成", async () => {
+  it("删除后重训失败时保留本地撤回结果，避免 sync 重新入库", async () => {
     await writeFile(join(paths.assetsDirectory, "person.jpg"), validJpeg);
     const original = {
       schemaVersion: 2,
@@ -358,7 +364,34 @@ describe("人物库管理脚本", () => {
     };
     await expect(runPeopleAdmin(
       ["delete", "person"], paths, { write: () => undefined }, { azureClient: client },
-    )).rejects.toThrow("删除尚未对 Identify 生效");
-    expect(JSON.parse(await readFile(paths.peopleFile, "utf8"))).toEqual(original);
+    )).rejects.toThrow("本地照片与成员已撤回");
+    expect(parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8"))).people).toEqual([]);
+    await expect(readFile(join(paths.assetsDirectory, "person.jpg")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("入库时剥离 PNG 元数据", async () => {
+    const inputPhoto = join(root, "metadata.png");
+    const original = await sharp({
+      create: {
+        width: 10,
+        height: 10,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    }).png().withMetadata({
+      exif: { IFD0: { Artist: "private-name" } },
+    }).toBuffer();
+    await writeFile(inputPhoto, original);
+    expect((await sharp(original).metadata()).exif).toBeDefined();
+
+    await runPeopleAdmin([
+      "add", "--id", "person-png", "--display-name", "PNG", "--photo", inputPhoto,
+      "--source-note", "已完成用途授权。",
+    ], paths, { write: (value) => outputs.push(value) });
+
+    const added = outputs[0] as { people: Array<{ oldPhotoFile: string }> };
+    const stored = await readFile(join(paths.assetsDirectory, added.people[0]!.oldPhotoFile));
+    expect((await sharp(stored).metadata()).exif).toBeUndefined();
   });
 });
