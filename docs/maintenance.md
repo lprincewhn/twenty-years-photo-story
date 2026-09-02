@@ -6,7 +6,7 @@
 
 - `FaceMatchProvider.match(photo)`：返回人脸数量和候选 `personId`/分数，不直接决定身份结论。
 - `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰枚举及客观描述。
-- `StoryProvider.generate(displayName, differences)`：返回固定 AI 标签、标题、正文和免责声明。
+- `StoryProvider.generate(differences)`：返回固定 AI 标签、标题、正文和免责声明。
 
 `apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Terra deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。
 
@@ -25,7 +25,7 @@
 - 差异与故事接口共用一个 GPT-5.6 Terra deployment，但保留两个独立 provider 类和 JSON Schema。
 - 使用 `DefaultAzureCredential` 和 `https://cognitiveservices.azure.com/.default`，生产身份需有 `Cognitive Services OpenAI User`；不接受 API key。
 - 差异分析只向模型发送人物库旧照和本次上传照片，提示词禁止推断年龄、种族、健康、宗教、身份和真实经历。响应还会经过严格 schema 与四类别白名单两层校验。
-- 故事只接收展示名和已过滤差异；应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。
+- 故事只接收已过滤差异，不向模型发送人物展示名；正文必须使用第二人称并明确体现二十年跨度。应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。
 - 默认总超时 60 秒，客户端取消会向下游传播；429 映射为 `RATE_LIMITED`，网络、超时、无效 JSON 和服务错误映射为 `PROVIDER_UNAVAILABLE`。
 - 不记录图片、base64 请求体、人物名、差异或故事内容。请求结束后，上传照片与从私有人物库读取的旧照 Buffer 都会清零。
 

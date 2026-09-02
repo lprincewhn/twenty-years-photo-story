@@ -171,11 +171,9 @@ components:
           $ref: "#/components/schemas/FictionStory"
     Person:
       type: object
-      required: [id, displayName, oldPhotoUrl, sourceNote, faceBox]
+      required: [id, oldPhotoUrl, sourceNote, faceBox]
       properties:
         id:
-          type: string
-        displayName:
           type: string
         oldPhotoUrl:
           type: string

@@ -20,7 +20,6 @@ export interface ExperienceResult {
     confidence: "high" | "medium";
     person: {
       id: string;
-      displayName: string;
       oldPhotoUrl: string;
       sourceNote: string;
       faceBox: {

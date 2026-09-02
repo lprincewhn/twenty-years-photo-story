@@ -217,17 +217,16 @@ export class AzureFoundryStoryProvider implements StoryProvider {
   constructor(private readonly client: AzureFoundryClient) {}
 
   async generate(
-    _displayName: string,
     differences: VisibleDifference[],
     signal?: AbortSignal,
   ): Promise<FictionStory> {
-    void _displayName;
     const body = await this.client.complete([
       {
         role: "system",
         content:
           "根据给定的可见差异创作温暖、克制的中文短故事。" +
           "必须始终用第二人称“你”讲述，正文至少出现一次“你”；" +
+          "故事必须明确连接二十年前与现在，正文必须包含“二十年”；" +
           "不得使用展示名，也不得以“他”“她”或“人物”指代故事主人公。" +
           "必须明确是虚构，不得补充敏感属性、身份结论或真实经历。",
       },
@@ -238,7 +237,11 @@ export class AzureFoundryStoryProvider implements StoryProvider {
     ], "fiction_story", storyJsonSchema, signal);
     const parsed = storySchema.safeParse(body);
     if (!parsed.success) throw providerError(false);
-    if (!parsed.data.content.includes("你") || /[他她]/u.test(parsed.data.content)) {
+    if (
+      !parsed.data.content.includes("你") ||
+      !parsed.data.content.includes("二十年") ||
+      /[他她]/u.test(parsed.data.content)
+    ) {
       throw providerError(false);
     }
     return {

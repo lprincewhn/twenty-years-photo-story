@@ -57,7 +57,6 @@ export interface DifferenceProvider {
 
 export interface StoryProvider {
   generate(
-    displayName: string,
     differences: VisibleDifference[],
     signal?: AbortSignal,
   ): Promise<FictionStory>;

@@ -365,7 +365,6 @@ export function App({ analyze = analyzePhoto }: AppProps) {
               </figure>
             </div>
             <div className="confidence">
-              <strong>{result.match.person.displayName}</strong>
               <span>模拟匹配分数 {(result.match.score * 100).toFixed(0)}%</span>
               <span>结论阈值 {(result.match.threshold * 100).toFixed(0)}%</span>
             </div>

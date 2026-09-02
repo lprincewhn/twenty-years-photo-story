@@ -407,7 +407,6 @@ export function createApp({ config, providers }: AppDependencies) {
               ? differences
               : [{ category: "expression" as const, description: "两张照片都记录了自然的神态。" }];
           const generatedStory = await providers.story.generate(
-            person.displayName,
             safeDifferences,
             photo.signal,
           );
@@ -443,7 +442,6 @@ export function createApp({ config, providers }: AppDependencies) {
               confidence: score >= 0.92 ? "high" : "medium",
               person: {
                 id: person.id,
-                displayName: person.displayName,
                 oldPhotoUrl: person.oldPhotoUrl,
                 sourceNote: person.sourceNote,
                 faceBox: normalizeFaceBox(

@@ -36,7 +36,10 @@ describe("Azure Foundry provider", () => {
               description: "发型由短发变为长发。",
             }],
           })
-        : completion({ title: "相册的一页", content: "你翻开相册，读到一段温暖的虚构故事。" });
+        : completion({
+            title: "相册的一页",
+            content: "你翻开相册，看见二十年前与现在之间温暖的虚构故事。",
+          });
     });
     const client = new AzureFoundryClient(config, {
       credential,
@@ -46,7 +49,7 @@ describe("Azure Foundry provider", () => {
       { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
       { bytes: Buffer.from("old"), mimeType: "image/webp" },
     );
-    const story = await new AzureFoundryStoryProvider(client).generate("家人", differences);
+    const story = await new AzureFoundryStoryProvider(client).generate(differences);
 
     expect(differences).toEqual([{
       category: "hairstyle",
@@ -57,13 +60,13 @@ describe("Azure Foundry provider", () => {
       title: "相册的一页",
     });
     expect(story.content).toContain("你");
+    expect(story.content).toContain("二十年");
     expect(bodies).toHaveLength(2);
     expect(bodies.every((body) => body.model === "gpt-5.6-terra")).toBe(true);
     expect(bodies.every((body) =>
       (body.response_format as { type: string }).type === "json_schema")).toBe(true);
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
-    expect(JSON.stringify(bodies[1])).not.toContain("家人");
   });
 
   it.each([
@@ -75,7 +78,7 @@ describe("Azure Foundry provider", () => {
       credential,
       fetch: vi.fn(async () => completion({}, status)) as typeof globalThis.fetch,
     });
-    await expect(new AzureFoundryStoryProvider(client).generate("人物", []))
+    await expect(new AzureFoundryStoryProvider(client).generate([]))
       .rejects.toMatchObject({ code, retryable });
   });
 
@@ -92,17 +95,18 @@ describe("Azure Foundry provider", () => {
     )).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
   });
 
-  it("拒绝没有使用第二人称或混用第三人称的故事", async () => {
+  it("拒绝未使用第二人称、缺少二十年跨度或混用第三人称的故事", async () => {
     const responses = [
-      { title: "相册", content: "她翻开了一本旧相册。" },
-      { title: "相册", content: "你看见他翻开了一本旧相册。" },
+      { title: "相册", content: "二十年后，她翻开了一本旧相册。" },
+      { title: "相册", content: "你看见他在二十年后翻开旧相册。" },
+      { title: "相册", content: "你翻开了一本旧相册。" },
     ];
     for (const response of responses) {
       const client = new AzureFoundryClient(config, {
         credential,
         fetch: vi.fn(async () => completion(response)) as typeof globalThis.fetch,
       });
-      await expect(new AzureFoundryStoryProvider(client).generate("家人", []))
+      await expect(new AzureFoundryStoryProvider(client).generate([]))
         .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
     }
   });
