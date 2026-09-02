@@ -19,7 +19,7 @@ describe("mock provider", () => {
   it("无需密钥即可返回匹配、可见差异和虚构故事", async () => {
     const face = await new MockFaceMatchProvider().match(photo("success"));
     const differences = await new MockDifferenceProvider().analyze(photo("success"));
-    const story = await new MockStoryProvider().generate("示例人物", differences);
+    const story = await new MockStoryProvider().generate(differences);
 
     expect(face).toEqual({
       faceCount: 1,
@@ -32,6 +32,7 @@ describe("mock provider", () => {
       "accessory",
     ]);
     expect(story.label).toBe("AI 创作/虚构");
+    expect(story.content).toContain("二十年");
     expect(story.disclaimer).toContain("不代表人物的真实经历");
   });
 

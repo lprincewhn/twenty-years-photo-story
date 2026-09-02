@@ -5,6 +5,8 @@ info:
   description: |
     接收已获明确授权的单张现场照片，在内存中完成示例匹配、
     可见非敏感差异分析和虚构故事生成。现场照片默认不留存。
+    内部人物库可由多人合影构建，但 real 模式要求合影全员授权；
+    匹配仍只返回一个具体人物，因此公开响应结构不随 v2 人物库变化。
 servers:
   - url: /api
     description: 与 H5 同源的接口
@@ -30,7 +32,9 @@ paths:
   /experience:
     post:
       summary: 创建一次不持久化的照片故事体验
-      description: 图片只在本请求内存中处理，请求结束后尽力清零缓冲区。
+      description: |
+        图片只在本请求内存中处理，请求结束后尽力清零缓冲区。
+        默认业务匹配阈值为 0.6；低于阈值不返回候选人物结论。
       requestBody:
         required: true
         content:
@@ -167,16 +171,37 @@ components:
           $ref: "#/components/schemas/FictionStory"
     Person:
       type: object
-      required: [id, displayName, oldPhotoUrl, sourceNote]
+      required: [id, oldPhotoUrl, sourceNote, faceBox]
       properties:
         id:
-          type: string
-        displayName:
           type: string
         oldPhotoUrl:
           type: string
         sourceNote:
           type: string
+        faceBox:
+          description: 匹配人物在旧照中的归一化位置；旧版占位人物可能没有坐标。
+          oneOf:
+            - type: object
+              required: [left, top, width, height]
+              properties:
+                left:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                top:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                width:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 1
+                height:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 1
+            - type: "null"
     VisibleDifference:
       type: object
       required: [category, description]

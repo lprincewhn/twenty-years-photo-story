@@ -10,6 +10,7 @@ import express, {
 } from "express";
 import { rateLimit } from "express-rate-limit";
 import multer from "multer";
+import sharp from "sharp";
 import type { AppConfig } from "./config.js";
 import { AppError, faceCountError } from "./errors.js";
 import {
@@ -17,7 +18,13 @@ import {
   MAX_PHOTO_BYTES,
   supportedPhotoMimeTypes,
 } from "./photo-validation.js";
-import { loadPeople } from "./people.js";
+import {
+  isPhotoFullyAuthorized,
+  loadPeopleLibrary,
+  resolvePeople,
+  resolvePeopleLibraryPaths,
+  type FaceBox,
+} from "./people.js";
 import {
   allowedDifferenceCategories,
   type DemoCase,
@@ -25,7 +32,7 @@ import {
   type ProviderSet,
 } from "./providers/types.js";
 
-const peopleAssetsDirectory = fileURLToPath(new URL("./assets/people", import.meta.url));
+const peopleAssetsDirectory = fileURLToPath(resolvePeopleLibraryPaths().assetsDirectory);
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const photoContentTypes: Readonly<Record<string, string>> = {
   ".jpeg": "image/jpeg",
@@ -157,9 +164,41 @@ function sendError(response: Response, error: AppError): void {
   });
 }
 
+function normalizeFaceBox(
+  faceBox: { left: number; top: number; width: number; height: number } | null,
+  photoWidth: number | null,
+  photoHeight: number | null,
+) {
+  if (!faceBox || !photoWidth || !photoHeight) return null;
+  return {
+    left: faceBox.left / photoWidth,
+    top: faceBox.top / photoHeight,
+    width: faceBox.width / photoWidth,
+    height: faceBox.height / photoHeight,
+  };
+}
+
+async function cropMatchedPerson(
+  bytes: Buffer,
+  faceBox: FaceBox,
+  photoWidth: number,
+  photoHeight: number,
+): Promise<Buffer> {
+  const left = Math.max(0, faceBox.left - Math.floor(faceBox.width / 2));
+  const top = Math.max(0, faceBox.top - Math.floor(faceBox.height / 2));
+  const right = Math.min(photoWidth, faceBox.left + Math.ceil(faceBox.width * 1.5));
+  const bottom = Math.min(photoHeight, faceBox.top + faceBox.height * 3);
+  return sharp(bytes)
+    .rotate()
+    .extract({ left, top, width: right - left, height: bottom - top })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+}
+
 export function createApp({ config, providers }: AppDependencies) {
   const app = express();
-  const people = loadPeople();
+  const peopleLibrary = loadPeopleLibrary();
+  const people = resolvePeople(peopleLibrary);
   const upload = multer({
     storage: zeroingMemoryStorage(),
     limits: {
@@ -230,6 +269,18 @@ export function createApp({ config, providers }: AppDependencies) {
         "PERSON_PHOTO_NOT_FOUND",
         "人物照片不存在",
         "该人物照片不存在或已撤回。",
+        false,
+      );
+    }
+    if (
+      config.providerMode === "real" &&
+      !isPhotoFullyAuthorized(peopleLibrary, person.photoId)
+    ) {
+      throw new AppError(
+        404,
+        "PERSON_PHOTO_NOT_FOUND",
+        "人物照片不存在",
+        "该合影尚未取得全员授权或已有人撤回授权。",
         false,
       );
     }
@@ -318,6 +369,7 @@ export function createApp({ config, providers }: AppDependencies) {
           bytes,
           mimeType: request.file.mimetype,
           demoCase,
+          signal: AbortSignal.timeout(30_000),
         };
 
         try {
@@ -345,11 +397,43 @@ export function createApp({ config, providers }: AppDependencies) {
           const person = people.find((entry) => entry.id === candidate.personId);
           if (
             !person ||
-            (config.providerMode === "real" && person.authorization !== "authorized")
+            (config.providerMode === "real" &&
+              !isPhotoFullyAuthorized(peopleLibrary, person.photoId))
           ) {
             throw new Error("provider 候选不在授权人物库");
           }
-          const rawDifferences = await providers.difference.analyze(photo, person.id);
+          let rawDifferences;
+          if (config.providerMode === "real") {
+            if (person.photoMimeType === "image/svg+xml") {
+              throw new Error("real provider 不支持 SVG 人物照片");
+            }
+            const referencePath = resolve(peopleAssetsDirectory, person.oldPhotoFile);
+            if (!referencePath.startsWith(`${resolve(peopleAssetsDirectory)}${sep}`)) {
+              throw new Error("人物照片路径无效");
+            }
+            const referenceBytes = await readFile(referencePath);
+            let matchedPersonBytes: Buffer | undefined;
+            try {
+              if (!person.faceBox || !person.photoWidth || !person.photoHeight) {
+                throw new Error("real provider 的人物照片缺少 faceBox 或宽高");
+              }
+              matchedPersonBytes = await cropMatchedPerson(
+                referenceBytes,
+                person.faceBox,
+                person.photoWidth,
+                person.photoHeight,
+              );
+              rawDifferences = await providers.difference.analyze(photo, {
+                bytes: matchedPersonBytes,
+                mimeType: "image/jpeg",
+              });
+            } finally {
+              matchedPersonBytes?.fill(0);
+              referenceBytes.fill(0);
+            }
+          } else {
+            rawDifferences = await providers.difference.analyze(photo);
+          }
           const differences = rawDifferences.filter((item) =>
             allowedDifferenceCategories.includes(item.category),
           );
@@ -358,8 +442,8 @@ export function createApp({ config, providers }: AppDependencies) {
               ? differences
               : [{ category: "expression" as const, description: "两张照片都记录了自然的神态。" }];
           const generatedStory = await providers.story.generate(
-            person.displayName,
             safeDifferences,
+            photo.signal,
           );
           const story = {
             ...generatedStory,
@@ -393,9 +477,13 @@ export function createApp({ config, providers }: AppDependencies) {
               confidence: score >= 0.92 ? "high" : "medium",
               person: {
                 id: person.id,
-                displayName: person.displayName,
                 oldPhotoUrl: person.oldPhotoUrl,
                 sourceNote: person.sourceNote,
+                faceBox: normalizeFaceBox(
+                  person.faceBox,
+                  person.photoWidth,
+                  person.photoHeight,
+                ),
               },
             },
             differences: safeDifferences,

@@ -8,14 +8,16 @@
     "people": "tsx src/people-admin.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "build": "tsc && cp src/people.json dist/people.json && cp -r src/assets dist/assets",
+    "build": "tsc && rm -rf dist/seed dist/assets dist/people.json && cp -r src/seed dist/seed && if [ -f src/people.json ]; then cp src/people.json dist/people.json; fi && if [ -d src/assets ]; then cp -r src/assets dist/assets; fi",
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.2",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "multer": "^2.0.2",
+    "sharp": "^0.35.4",
     "zod": "^4.1.5"
   },
   "devDependencies": {

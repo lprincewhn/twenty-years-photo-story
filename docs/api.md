@@ -56,7 +56,7 @@ curl -X POST http://localhost:3000/api/experience \
     "requestId": "仅用于排障的随机标识",
     "details": {
       "score": 0.61,
-      "threshold": 0.82
+      "threshold": 0.6
     }
   }
 }
