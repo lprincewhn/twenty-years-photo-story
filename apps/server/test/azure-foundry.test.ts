@@ -93,6 +93,17 @@ describe("Azure Foundry provider", () => {
         deployment: "gpt-5.6-terra",
         messageRoles: ["system", "user"],
         imageMimeTypes: ["image/webp", "image/jpeg"],
+        promptMessages: [
+          { role: "system" },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "第一张是人物库旧照，第二张是用户当前照片。请输出可见差异。" },
+              { type: "image_url", image_url: { url: "[图片已脱敏：image/webp]" } },
+              { type: "image_url", image_url: { url: "[图片已脱敏：image/jpeg]" } },
+            ],
+          },
+        ],
       },
       {
         event: "foundry.response",
@@ -104,6 +115,17 @@ describe("Azure Foundry provider", () => {
         event: "foundry.request",
         schemaName: "fiction_story",
         imageMimeTypes: [],
+        promptMessages: [
+          { role: "system" },
+          {
+            role: "user",
+            content: {
+              differences: "[已脱敏：1 条可见差异]",
+              creativeDirection: storyInput.creativeDirection,
+              variationId: storyInput.variationId,
+            },
+          },
+        ],
       },
       {
         event: "foundry.response",
@@ -116,6 +138,7 @@ describe("Azure Foundry provider", () => {
     expect(serializedLogs).not.toContain("base64");
     expect(serializedLogs).not.toContain("发型由短发变为长发");
     expect(serializedLogs).not.toContain("相册的一页");
+    expect(serializedLogs).toContain("轻松、搞笑、抖梗");
   });
 
   it("连续调用时即使随机值相同也排除最近使用的创意坐标", async () => {

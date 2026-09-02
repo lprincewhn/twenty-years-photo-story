@@ -115,6 +115,7 @@ export interface AzureFoundryInteractionLog {
   deployment: string;
   messageRoles?: string[];
   imageMimeTypes?: string[];
+  promptMessages?: Array<{ role: string; content: unknown }>;
   outcome?: "success" | "error";
   httpStatus?: number;
   durationMs?: number;
@@ -122,28 +123,61 @@ export interface AzureFoundryInteractionLog {
   errorCode?: string;
 }
 
-function summarizeMessages(messages: unknown[]): {
+function summarizeMessages(messages: unknown[], schemaName: string): {
   messageRoles: string[];
   imageMimeTypes: string[];
+  promptMessages: Array<{ role: string; content: unknown }>;
 } {
   const messageRoles: string[] = [];
   const imageMimeTypes: string[] = [];
+  const promptMessages: Array<{ role: string; content: unknown }> = [];
   for (const message of messages) {
     if (!message || typeof message !== "object") continue;
     const record = message as Record<string, unknown>;
-    if (typeof record.role === "string") messageRoles.push(record.role);
-    if (!Array.isArray(record.content)) continue;
-    for (const item of record.content) {
-      if (!item || typeof item !== "object") continue;
-      const imageUrl = (item as Record<string, unknown>).image_url;
-      if (!imageUrl || typeof imageUrl !== "object") continue;
-      const url = (imageUrl as Record<string, unknown>).url;
-      if (typeof url !== "string") continue;
-      const match = /^data:([^;,]+);base64,/u.exec(url);
-      if (match?.[1]) imageMimeTypes.push(match[1]);
+    if (typeof record.role !== "string") continue;
+    messageRoles.push(record.role);
+    if (typeof record.content === "string") {
+      let content: unknown = record.content;
+      if (schemaName === "fiction_story" && record.role === "user") {
+        try {
+          const payload = JSON.parse(record.content) as Record<string, unknown>;
+          const differenceCount = Array.isArray(payload.differences)
+            ? payload.differences.length
+            : 0;
+          content = {
+            ...payload,
+            differences: `[已脱敏：${differenceCount} 条可见差异]`,
+          };
+        } catch {
+          content = "[无法安全解析的用户提示词已脱敏]";
+        }
+      }
+      promptMessages.push({ role: record.role, content });
+      continue;
     }
+    if (!Array.isArray(record.content)) continue;
+    const content = record.content.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const itemRecord = item as Record<string, unknown>;
+      const imageUrl = itemRecord.image_url;
+      if (!imageUrl || typeof imageUrl !== "object") return item;
+      const imageUrlRecord = imageUrl as Record<string, unknown>;
+      const url = imageUrlRecord.url;
+      if (typeof url !== "string") return item;
+      const match = /^data:([^;,]+);base64,/u.exec(url);
+      if (!match?.[1]) return item;
+      imageMimeTypes.push(match[1]);
+      return {
+        ...itemRecord,
+        image_url: {
+          ...imageUrlRecord,
+          url: `[图片已脱敏：${match[1]}]`,
+        },
+      };
+    });
+    promptMessages.push({ role: record.role, content });
   }
-  return { messageRoles, imageMimeTypes };
+  return { messageRoles, imageMimeTypes, promptMessages };
 }
 
 function providerError(retryable: boolean): AppError {
@@ -184,7 +218,7 @@ export class AzureFoundryClient {
     if (!token) throw providerError(true);
     const interactionId = randomUUID();
     const startedAt = Date.now();
-    const messageSummary = summarizeMessages(messages);
+    const messageSummary = summarizeMessages(messages, schemaName);
     this.log({
       event: "foundry.request",
       interactionId,
