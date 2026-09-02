@@ -44,6 +44,7 @@ export function App({ analyze = analyzePhoto }: AppProps) {
   const [consentError, setConsentError] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [narrationUrl, setNarrationUrl] = useState("");
   const [result, setResult] = useState<ExperienceResult | null>(null);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
   const [demoCase, setDemoCase] = useState<DemoCase>("success");
@@ -63,6 +64,20 @@ export function App({ analyze = analyzePhoto }: AppProps) {
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [photo]);
+
+  useEffect(() => {
+    if (!result) {
+      setNarrationUrl("");
+      return;
+    }
+    const binary = window.atob(result.narration.audioBase64);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const url = URL.createObjectURL(
+      new Blob([bytes], { type: result.narration.mimeType }),
+    );
+    setNarrationUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [result]);
 
   useEffect(() => {
     if (phase !== "capture") {
@@ -386,14 +401,16 @@ export function App({ analyze = analyzePhoto }: AppProps) {
             </article>
             <div className="narration">
               <strong>有感情地听故事</strong>
-              <audio
-                aria-label="故事情感朗读"
-                autoPlay
-                controls
-                src={`data:${result.narration.mimeType};base64,${result.narration.audioBase64}`}
-              >
-                当前浏览器不支持音频播放。
-              </audio>
+              {narrationUrl ? (
+                <audio
+                  aria-label="故事情感朗读"
+                  autoPlay
+                  controls
+                  src={narrationUrl}
+                >
+                  当前浏览器不支持音频播放。
+                </audio>
+              ) : null}
             </div>
             <p className="retention">{result.retention}</p>
             <button className="primary" type="button" onClick={reset}>重新体验</button>
