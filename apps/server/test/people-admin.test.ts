@@ -337,6 +337,33 @@ describe("人物库管理脚本", () => {
     expect(parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8"))).people).toEqual([]);
   });
 
+  it("在调用 Azure 前拒绝无效人物 ID", async () => {
+    const inputPhoto = join(root, "invalid-id.png");
+    await writeFile(inputPhoto, await pngImage(100, 100));
+    const client: PeopleAdminAzureClient = {
+      detect: vi.fn(async () => [{
+        faceId: "11111111-1111-4111-8111-111111111111",
+        faceRectangle: { left: 10, top: 10, width: 40, height: 40 },
+        qualityForRecognition: "high" as const,
+      }]),
+      identify: vi.fn(),
+      ensureGroup: vi.fn(),
+      createPerson: vi.fn(),
+      addFace: vi.fn(),
+      deleteFace: vi.fn(),
+      deletePerson: vi.fn(),
+      train: vi.fn(),
+      waitForTraining: vi.fn(),
+    };
+
+    await expect(runPeopleAdmin([
+      "add", "--photo", inputPhoto, "--source-note", "授权",
+      "--member", "invalid/id:人物:0",
+    ], paths, { write: () => undefined }, { azureClient: client })).rejects.toThrow();
+    expect(client.ensureGroup).not.toHaveBeenCalled();
+    expect(client.createPerson).not.toHaveBeenCalled();
+  });
+
   it("删除后重训失败时保留本地撤回结果，避免 sync 重新入库", async () => {
     await writeFile(join(paths.assetsDirectory, "person.jpg"), validJpeg);
     const original = {
@@ -368,6 +395,51 @@ describe("人物库管理脚本", () => {
     expect(parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8"))).people).toEqual([]);
     await expect(readFile(join(paths.assetsDirectory, "person.jpg")))
       .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("Azure 删除失败时先在本地停用照片并支持重试", async () => {
+    const photo = join(paths.assetsDirectory, "retry.jpg");
+    await writeFile(photo, validJpeg);
+    await writeFile(paths.peopleFile, JSON.stringify({
+      schemaVersion: 2,
+      photos: [{
+        id: "retry-photo", file: "retry.jpg", mimeType: "image/jpeg", width: null, height: null,
+        sourceNote: "授权", members: [{
+          personId: "retry-person", faceBox: null,
+          azurePersistedFaceId: "11111111-1111-4111-8111-111111111111",
+        }],
+      }],
+      people: [{
+        id: "retry-person", displayName: "人物", photoId: "retry-photo",
+        oldPhotoUrl: "/api/people/retry-person/photo", authorization: "authorized",
+        sourceNote: "授权", azurePersonId: "22222222-2222-4222-8222-222222222222",
+      }],
+    }));
+    let attempts = 0;
+    const client: PeopleAdminAzureClient = {
+      detect: vi.fn(),
+      identify: vi.fn(),
+      ensureGroup: vi.fn(),
+      createPerson: vi.fn(),
+      addFace: vi.fn(),
+      deleteFace: vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("network");
+      }),
+      deletePerson: vi.fn(async () => undefined),
+      train: vi.fn(async () => undefined),
+      waitForTraining: vi.fn(async () => undefined),
+    };
+
+    await expect(runPeopleAdmin(
+      ["delete", "retry-person"], paths, { write: () => undefined }, { azureClient: client },
+    )).rejects.toThrow("照片已在本地停用");
+    await expect(readFile(photo)).rejects.toMatchObject({ code: "ENOENT" });
+
+    await runPeopleAdmin(
+      ["delete", "retry-person"], paths, { write: () => undefined }, { azureClient: client },
+    );
+    expect(parsePeopleLibrary(JSON.parse(await readFile(paths.peopleFile, "utf8"))).people).toEqual([]);
   });
 
   it("入库时剥离 PNG 元数据", async () => {

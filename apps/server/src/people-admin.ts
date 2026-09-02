@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  access,
   mkdir,
   open,
   readFile,
@@ -444,6 +445,35 @@ async function addPeople(
       const file = `${randomUUID()}${storedExtension}`;
       const createdAzureIds: string[] = [];
       const azureEntries = new Map<string, { personId: string; persistedFaceId: string }>();
+      const draftPeople: PersonEntry[] = members.map((member) => ({
+        id: member.id,
+        displayName: member.displayName,
+        photoId,
+        oldPhotoUrl: `/api/people/${member.id}/photo`,
+        authorization,
+        sourceNote,
+        azurePersonId: null,
+      }));
+      const draft = parsePeopleLibrary({
+        ...library,
+        photos: [...library.photos, {
+          id: photoId,
+          file,
+          mimeType,
+          width: dimensions?.width ?? null,
+          height: dimensions?.height ?? null,
+          sourceNote,
+          members: members.map((member) => ({
+            personId: member.id,
+            faceBox: detectedFaces?.[member.faceIndex]?.faceRectangle ?? null,
+            azurePersistedFaceId: null,
+          })),
+        }],
+        people: [...library.people, ...draftPeople],
+      });
+      const destination = resolve(paths.assetsDirectory, file);
+      await mkdir(paths.assetsDirectory, { recursive: true });
+      await writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
       if (client && detectedFaces) {
         try {
           await client.ensureGroup();
@@ -460,40 +490,27 @@ async function addPeople(
             azurePersonId: azureEntries.get(member.id)!.personId,
           })));
         } catch (error) {
+          await removeIfExists(destination);
           await rollbackCreated(client, createdAzureIds);
           throw error;
         }
       }
 
-      const people: PersonEntry[] = members.map((member) => ({
-        id: member.id,
-        displayName: member.displayName,
-        photoId,
-        oldPhotoUrl: `/api/people/${member.id}/photo`,
-        authorization,
-        sourceNote,
-        azurePersonId: azureEntries.get(member.id)?.personId ?? null,
-      }));
       const next = parsePeopleLibrary({
-        ...library,
-        photos: [...library.photos, {
-          id: photoId,
-          file,
-          mimeType,
-          width: dimensions?.width ?? null,
-          height: dimensions?.height ?? null,
-          sourceNote,
-          members: members.map((member) => ({
-            personId: member.id,
-            faceBox: detectedFaces?.[member.faceIndex]?.faceRectangle ?? null,
-            azurePersistedFaceId: azureEntries.get(member.id)?.persistedFaceId ?? null,
+        ...draft,
+        people: draft.people.map((entry) => ({
+          ...entry,
+          azurePersonId: azureEntries.get(entry.id)?.personId ?? entry.azurePersonId,
+        })),
+        photos: draft.photos.map((entry) => ({
+          ...entry,
+          members: entry.members.map((member) => ({
+            ...member,
+            azurePersistedFaceId:
+              azureEntries.get(member.personId)?.persistedFaceId ?? member.azurePersistedFaceId,
           })),
-        }],
-        people: [...library.people, ...people],
+        })),
       });
-      const destination = resolve(paths.assetsDirectory, file);
-      await mkdir(paths.assetsDirectory, { recursive: true });
-      await writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
       try {
         await writeLibrary(paths.peopleFile, next);
       } catch (error) {
@@ -520,14 +537,26 @@ async function deletePerson(
     if (!person) throw new Error(`人物不存在：${id}`);
     const photo = library.photos.find((entry) => entry.id === person.photoId)!;
     const photoPeople = resolvePeople(library).filter((entry) => entry.photoId === photo.id);
+    const photoPath = resolve(paths.assetsDirectory, photo.file);
+    const withdrawnPath = `${photoPath}.withdrawn`;
+    try {
+      await rename(photoPath, withdrawnPath);
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+      await access(withdrawnPath);
+    }
     if (photoPeople.some((entry) => entry.azurePersonId)) {
       if (!client) throw new Error("删除 Azure 人脸模板需要 PROVIDER_MODE=real 的 Azure Face 配置");
-      for (const photoPerson of photoPeople) {
-        const member = photo.members.find((entry) => entry.personId === photoPerson.id)!;
-        if (photoPerson.azurePersonId && member.azurePersistedFaceId) {
-          await client.deleteFace(photoPerson.azurePersonId, member.azurePersistedFaceId);
+      try {
+        for (const photoPerson of photoPeople) {
+          const member = photo.members.find((entry) => entry.personId === photoPerson.id)!;
+          if (photoPerson.azurePersonId && member.azurePersistedFaceId) {
+            await client.deleteFace(photoPerson.azurePersonId, member.azurePersistedFaceId);
+          }
+          if (photoPerson.azurePersonId) await client.deletePerson(photoPerson.azurePersonId);
         }
-        if (photoPerson.azurePersonId) await client.deletePerson(photoPerson.azurePersonId);
+      } catch {
+        throw new Error("照片已在本地停用，但 Azure 清理失败；请重试同一 delete 命令");
       }
     }
     const removedPersonIds = new Set(photoPeople.map((entry) => entry.id));
@@ -537,7 +566,7 @@ async function deletePerson(
       photos: library.photos.filter((entry) => entry.id !== photo.id),
     });
     await writeLibrary(paths.peopleFile, next);
-    await removeIfExists(resolve(paths.assetsDirectory, photo.file));
+    await removeIfExists(withdrawnPath);
     if (client && photoPeople.some((entry) => entry.azurePersonId)) {
       try {
         await train(client);
@@ -559,83 +588,71 @@ async function syncLibrary(
     if (library.people.some((person) => person.authorization !== "authorized")) {
       throw new Error("real 模式 sync 要求所有照片成员均已授权；placeholder 不能入库");
     }
-    await client.ensureGroup();
-    const createdIds: string[] = [];
-    const replacements = new Map<string, { personId: string; persistedFaceId: string }>();
-    let oldDeletionStarted = false;
-    try {
-      for (const photo of library.photos) {
-        if (!photo.members.every((member) => library.people.find((person) => person.id === member.personId)?.authorization === "authorized")) {
-          throw new Error(`合影 ${photo.id} 未取得全员授权`);
-        }
-        const bytes = await readFile(resolve(paths.assetsDirectory, photo.file));
-        try {
-          const dimensions = getDimensions(bytes, photo.mimeType as "image/jpeg" | "image/png" | "image/webp");
-          if (!dimensions) throw new Error(`无法读取照片宽高：${photo.id}`);
-          const faces = await client.detect(bytes, false);
-          for (const member of photo.members) {
-            if (!member.faceBox) throw new Error(`sync 要求 faceBox：${photo.id}/${member.personId}`);
-            const faceIndex = validateFaceBox(member.faceBox, dimensions, faces);
-            assertEnrollmentQuality(
-              faces[faceIndex]?.qualityForRecognition,
-              `${photo.id}/${member.personId}`,
-            );
-            const personId = await client.createPerson(member.personId);
-            createdIds.push(personId);
-            const persistedFaceId = await client.addFace(personId, bytes, member.faceBox);
-            replacements.set(member.personId, { personId, persistedFaceId });
-          }
-        } finally {
-          bytes.fill(0);
-        }
-      }
-      await train(client);
-
-      oldDeletionStarted = true;
-      for (const person of library.people) {
-        if (person.azurePersonId) await client.deletePerson(person.azurePersonId);
-      }
-      await train(client);
-      for (const photo of library.photos) {
-        const bytes = await readFile(resolve(paths.assetsDirectory, photo.file));
-        try {
-          await verifyEnrollment(client, bytes, {
-            width: photo.width!,
-            height: photo.height!,
-          }, photo.members.map((member) => {
-            if (!member.faceBox) throw new Error(`sync 要求 faceBox：${photo.id}/${member.personId}`);
-            return {
-              box: member.faceBox,
-              azurePersonId: replacements.get(member.personId)!.personId,
-            };
-          }));
-        } finally {
-          bytes.fill(0);
-        }
-      }
-
-      const next = parsePeopleLibrary({
-        ...library,
-        people: library.people.map((person) => ({
-          ...person,
-          azurePersonId: replacements.get(person.id)!.personId,
-        })),
-        photos: library.photos.map((photo) => ({
-          ...photo,
-          members: photo.members.map((member) => ({
-            ...member,
-            azurePersistedFaceId: replacements.get(member.personId)!.persistedFaceId,
-          })),
-        })),
-      });
-      await writeLibrary(paths.peopleFile, next);
-      return { action: "synced", people: next.people.length, photos: next.photos.length };
-    } catch (error) {
-      if (!oldDeletionStarted) {
-        await rollbackCreated(client, createdIds);
-      }
-      throw error;
+    if (library.people.some((person) => !person.azurePersonId)) {
+      throw new Error("sync 只能更新已登记的 Azure 人物；请使用 add 完成首次登记");
     }
+    await client.ensureGroup();
+    const replacements = new Map<string, string>();
+    for (const photo of library.photos) {
+      if (!photo.members.every((member) => library.people.find((person) => person.id === member.personId)?.authorization === "authorized")) {
+        throw new Error(`合影 ${photo.id} 未取得全员授权`);
+      }
+      const bytes = await readFile(resolve(paths.assetsDirectory, photo.file));
+      try {
+        const dimensions = getDimensions(bytes, photo.mimeType as "image/jpeg" | "image/png" | "image/webp");
+        if (!dimensions) throw new Error(`无法读取照片宽高：${photo.id}`);
+        const faces = await client.detect(bytes, false);
+        for (const member of photo.members) {
+          if (!member.faceBox) throw new Error(`sync 要求 faceBox：${photo.id}/${member.personId}`);
+          const faceIndex = validateFaceBox(member.faceBox, dimensions, faces);
+          assertEnrollmentQuality(
+            faces[faceIndex]?.qualityForRecognition,
+            `${photo.id}/${member.personId}`,
+          );
+          const personId = library.people.find((entry) => entry.id === member.personId)!.azurePersonId!;
+          if (member.azurePersistedFaceId) {
+            await client.deleteFace(personId, member.azurePersistedFaceId);
+          }
+          replacements.set(
+            member.personId,
+            await client.addFace(personId, bytes, member.faceBox),
+          );
+        }
+      } finally {
+        bytes.fill(0);
+      }
+    }
+    await train(client);
+    for (const photo of library.photos) {
+      const bytes = await readFile(resolve(paths.assetsDirectory, photo.file));
+      try {
+        await verifyEnrollment(client, bytes, {
+          width: photo.width!,
+          height: photo.height!,
+        }, photo.members.map((member) => {
+          if (!member.faceBox) throw new Error(`sync 要求 faceBox：${photo.id}/${member.personId}`);
+          return {
+            box: member.faceBox,
+            azurePersonId:
+              library.people.find((entry) => entry.id === member.personId)!.azurePersonId!,
+          };
+        }));
+      } finally {
+        bytes.fill(0);
+      }
+    }
+    const next = parsePeopleLibrary({
+      ...library,
+      photos: library.photos.map((photo) => ({
+        ...photo,
+        members: photo.members.map((member) => ({
+          ...member,
+          azurePersistedFaceId: replacements.get(member.personId)!,
+        })),
+      })),
+    });
+    await writeLibrary(paths.peopleFile, next);
+    return { action: "synced", people: next.people.length, photos: next.photos.length };
   });
 }
 

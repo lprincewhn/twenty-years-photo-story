@@ -324,6 +324,14 @@ export class AzureFaceClient {
         { method: "DELETE" },
       );
     } catch (error) {
+      if (
+        error instanceof AzureServiceError &&
+        (error.status === 404 ||
+          error.code === "PersonNotFound" ||
+          error.code === "PersistedFaceNotFound")
+      ) {
+        return;
+      }
       throw mapAzureError(error);
     }
   }
@@ -335,6 +343,12 @@ export class AzureFaceClient {
         { method: "DELETE" },
       );
     } catch (error) {
+      if (
+        error instanceof AzureServiceError &&
+        (error.status === 404 || error.code === "PersonNotFound")
+      ) {
+        return;
+      }
       throw mapAzureError(error);
     }
   }
