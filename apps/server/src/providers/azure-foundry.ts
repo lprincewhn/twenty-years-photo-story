@@ -1,3 +1,4 @@
+import { randomInt, randomUUID } from "node:crypto";
 import { DefaultAzureCredential, type TokenCredential } from "@azure/identity";
 import { z } from "zod";
 import type { AzureFoundryConfig } from "../config.js";
@@ -31,6 +32,75 @@ const completionSchema = z.object({
 });
 
 type JsonSchema = Record<string, unknown>;
+
+const storyPerspectives = [
+  "现在的你与过去的你对话",
+  "旧照片向你发问",
+  "未来的你写给此刻的你",
+  "一件可见配饰陪伴你",
+] as const;
+const storyStructures = [
+  "倒叙后回到当下",
+  "两个时刻交替推进",
+  "从一个动作展开",
+  "以三段微场景串联",
+] as const;
+const storySettings = [
+  "清晨车站",
+  "雨后书店",
+  "傍晚厨房",
+  "夏夜阳台",
+  "冬日公园",
+  "安静照相馆",
+] as const;
+const storyRhythms = [
+  "短句轻快",
+  "舒缓长句",
+  "对白驱动",
+  "电影分镜感",
+  "含蓄散文感",
+] as const;
+const storyEndings = [
+  "停在一个动作",
+  "留下一句对白",
+  "回扣开篇物件",
+  "以环境声音收束",
+  "开放式留白",
+] as const;
+const storyDirectionCount =
+  storyPerspectives.length *
+  storyStructures.length *
+  storySettings.length *
+  storyRhythms.length *
+  storyEndings.length;
+const recentStoryDirectionLimit = 5;
+
+interface StoryCreativeDirection {
+  perspective: string;
+  structure: string;
+  setting: string;
+  rhythm: string;
+  ending: string;
+}
+
+export interface AzureFoundryStoryDependencies {
+  randomIndex?: (maxExclusive: number) => number;
+  variationId?: () => string;
+}
+
+function decodeStoryDirection(index: number): StoryCreativeDirection {
+  let remaining = index;
+  const ending = storyEndings[remaining % storyEndings.length]!;
+  remaining = Math.floor(remaining / storyEndings.length);
+  const rhythm = storyRhythms[remaining % storyRhythms.length]!;
+  remaining = Math.floor(remaining / storyRhythms.length);
+  const setting = storySettings[remaining % storySettings.length]!;
+  remaining = Math.floor(remaining / storySettings.length);
+  const structure = storyStructures[remaining % storyStructures.length]!;
+  remaining = Math.floor(remaining / storyStructures.length);
+  const perspective = storyPerspectives[remaining % storyPerspectives.length]!;
+  return { perspective, structure, setting, rhythm, ending };
+}
 
 export interface AzureFoundryClientDependencies {
   credential?: TokenCredential;
@@ -214,12 +284,36 @@ export class AzureFoundryDifferenceProvider implements DifferenceProvider {
 }
 
 export class AzureFoundryStoryProvider implements StoryProvider {
-  constructor(private readonly client: AzureFoundryClient) {}
+  private readonly randomIndex: (maxExclusive: number) => number;
+  private readonly variationId: () => string;
+  private readonly recentDirections: number[] = [];
+
+  constructor(
+    private readonly client: AzureFoundryClient,
+    dependencies: AzureFoundryStoryDependencies = {},
+  ) {
+    this.randomIndex = dependencies.randomIndex ?? randomInt;
+    this.variationId = dependencies.variationId ?? randomUUID;
+  }
+
+  private nextCreativeDirection(): StoryCreativeDirection {
+    const startIndex = this.randomIndex(storyDirectionCount);
+    let directionIndex = startIndex;
+    while (this.recentDirections.includes(directionIndex)) {
+      directionIndex = (directionIndex + 1) % storyDirectionCount;
+    }
+    this.recentDirections.push(directionIndex);
+    if (this.recentDirections.length > recentStoryDirectionLimit) {
+      this.recentDirections.shift();
+    }
+    return decodeStoryDirection(directionIndex);
+  }
 
   async generate(
     differences: VisibleDifference[],
     signal?: AbortSignal,
   ): Promise<FictionStory> {
+    const creativeDirection = this.nextCreativeDirection();
     const body = await this.client.complete([
       {
         role: "system",
@@ -228,11 +322,19 @@ export class AzureFoundryStoryProvider implements StoryProvider {
           "必须始终用第二人称“你”讲述，正文至少出现一次“你”；" +
           "故事必须明确连接二十年前与现在，正文必须包含“二十年”；" +
           "不得使用展示名，也不得以“他”“她”或“人物”指代故事主人公。" +
-          "必须明确是虚构，不得补充敏感属性、身份结论或真实经历。",
+          "必须明确是虚构，不得补充敏感属性、身份结论或真实经历。" +
+          "严格执行用户消息中的本次创意坐标，使标题、开篇句式、叙事结构和结尾意象与坐标一致；" +
+          "不得提及创意坐标或创作编号，不要把差异逐条复述成报告。" +
+          "避免“翻开旧相册”“时光荏苒”“岁月留下痕迹”“仿佛回到从前”" +
+          "“未寄出的明信片”“珍惜每一次笑容”等高频套话。",
       },
       {
         role: "user",
-        content: JSON.stringify({ differences }),
+        content: JSON.stringify({
+          differences,
+          creativeDirection,
+          variationId: this.variationId(),
+        }),
       },
     ], "fiction_story", storyJsonSchema, signal);
     const parsed = storySchema.safeParse(body);
