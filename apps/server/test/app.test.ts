@@ -18,14 +18,19 @@ const config: AppConfig = {
   speech: { mode: "mock" },
 };
 const validJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+const accessCode = "123456";
+const accessCookie = `ps_access=${createHmac("sha256", config.peopleAssetSecret)
+  .update(accessCode)
+  .digest("base64url")}`;
 
 function app(providers: ProviderSet = createMockProviders(), overrides: Partial<AppConfig> = {}) {
-  return createApp({ config: { ...config, ...overrides }, providers });
+  return createApp({ config: { ...config, ...overrides }, providers, accessCode });
 }
 
 function validRequest(target = app()) {
   return request(target)
     .post("/api/experience")
+    .set("cookie", accessCookie)
     .field("consent", "true")
     .field("demoCase", "success")
     .attach("photo", validJpeg, {
@@ -40,9 +45,39 @@ describe("照片故事 API", () => {
     expect(response.body).toEqual({ status: "ok", providerMode: "mock" });
   });
 
+  it("仅在验证码正确时签发启动周期内的访问授权", async () => {
+    const target = app();
+    const missing = await request(target)
+      .post("/api/authorize")
+      .send({ code: "123" })
+      .expect(400);
+    expect(missing.body.error.code).toBe("AUTH_CODE_REQUIRED");
+
+    const invalid = await request(target)
+      .post("/api/authorize")
+      .send({ code: "654321" })
+      .expect(401);
+    expect(invalid.body.error.code).toBe("AUTH_CODE_INVALID");
+
+    const authorized = await request(target)
+      .post("/api/authorize")
+      .send({ code: accessCode })
+      .expect(204);
+    expect(authorized.headers["set-cookie"]?.[0]).toContain("ps_access=");
+    expect(authorized.headers["set-cookie"]?.[0]).toContain("HttpOnly");
+    expect(authorized.headers["set-cookie"]?.[0]).toContain("Secure");
+    expect(authorized.headers["set-cookie"]?.[0]).toContain("SameSite=Strict");
+  });
+
+  it("未通过验证码授权时拒绝使用体验接口", async () => {
+    const response = await request(app()).post("/api/experience").expect(401);
+    expect(response.body.error.code).toBe("AUTHORIZATION_REQUIRED");
+  });
+
   it("拒绝没有显式授权的上传", async () => {
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .attach("photo", validJpeg, {
         filename: "photo.jpg",
         contentType: "image/jpeg",
@@ -56,6 +91,7 @@ describe("照片故事 API", () => {
     async (contentType) => {
       const response = await request(app())
         .post("/api/experience")
+        .set("cookie", accessCookie)
         .set("content-type", contentType)
         .send(contentType === "application/json" ? {} : "")
         .expect(400);
@@ -66,6 +102,7 @@ describe("照片故事 API", () => {
   it("将错误文件字段解释为无效图片", async () => {
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .attach("image", validJpeg, {
         filename: "photo.jpg",
@@ -84,7 +121,9 @@ describe("照片故事 API", () => {
       .expect(400);
     expect(multipleFiles.body.error.code).toBe("INVALID_IMAGE");
 
-    const tooManyFields = request(app()).post("/api/experience");
+    const tooManyFields = request(app())
+      .post("/api/experience")
+      .set("cookie", accessCookie);
     for (let index = 0; index < 5; index += 1) {
       tooManyFields.field(`extra-${index}`, "value");
     }
@@ -118,17 +157,20 @@ describe("照片故事 API", () => {
     for (let index = 0; index < 30; index += 1) {
       await request(target)
         .post("/api/experience")
+        .set("cookie", accessCookie)
         .set("x-forwarded-for", "198.51.100.10")
         .expect(400);
     }
     const limited = await request(target)
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .set("x-forwarded-for", "198.51.100.10")
       .expect(429);
     expect(limited.body.error.code).toBe("RATE_LIMITED");
 
     await request(target)
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .set("x-forwarded-for", "198.51.100.11")
       .expect(400);
   });
@@ -136,6 +178,7 @@ describe("照片故事 API", () => {
   it("拒绝不支持的图片格式", async () => {
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .attach("photo", Buffer.from("文本"), {
         filename: "photo.txt",
@@ -148,6 +191,7 @@ describe("照片故事 API", () => {
   it("拒绝 MIME 伪装成图片的无效内容", async () => {
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .attach("photo", Buffer.from("并不是真正的图片"), {
         filename: "fake.jpg",
@@ -162,6 +206,7 @@ describe("照片故事 API", () => {
     validJpeg.copy(oversizedJpeg);
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .attach("photo", oversizedJpeg, {
         filename: "too-large.jpg",
@@ -282,6 +327,7 @@ describe("照片故事 API", () => {
   it("低于阈值不返回候选人物结论", async () => {
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .field("demoCase", "unmatched")
       .attach("photo", validJpeg, {
@@ -303,6 +349,7 @@ describe("照片故事 API", () => {
   ])("返回 %s 的中文可解释错误", async (demoCase, code) => {
     const response = await request(app())
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .field("demoCase", demoCase)
       .attach("photo", validJpeg, {
@@ -343,6 +390,7 @@ describe("照片故事 API", () => {
     };
     await request(app(providers, { providerMode: "real" }))
       .post("/api/experience")
+      .set("cookie", accessCookie)
       .field("consent", "true")
       .field("demoCase", "provider-error")
       .attach("photo", validJpeg, {

@@ -38,7 +38,8 @@ const successResult: ExperienceResult = {
 
 async function reachPreview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("checkbox"));
-  await user.click(screen.getByRole("button", { name: "开始拍照" }));
+  await user.type(screen.getByLabelText("启动验证码"), "123456");
+  await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
   expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
   const photo = new File(["图片"], "today.jpg", { type: "image/jpeg" });
   await user.upload(screen.getByLabelText("从相册选择照片"), photo);
@@ -48,17 +49,47 @@ async function reachPreview(user: ReturnType<typeof userEvent.setup>) {
 describe("移动端核心体验", () => {
   it("未明确授权时不进入拍摄并给出可聚焦提示", async () => {
     const user = userEvent.setup();
+    render(<App authorize={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
     render(<App />);
     expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
-    await user.click(screen.getByRole("button", { name: "开始拍照" }));
     expect(screen.getByRole("alert")).toHaveTextContent("请先主动勾选授权");
     expect(screen.queryByRole("heading", { name: "拍一张今天的你" })).not.toBeInTheDocument();
+  });
+
+  it("验证码通过服务端校验后才进入拍摄", async () => {
+    const user = userEvent.setup();
+    const authorize = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiClientError({
+          code: "AUTH_CODE_INVALID",
+          message: "验证码不正确",
+          explanation: "请检查服务启动日志中的 6 位验证码后重试。",
+          retryable: true,
+        }),
+      )
+      .mockResolvedValueOnce(undefined);
+    render(<App authorize={authorize} />);
+
+    await user.click(screen.getByRole("checkbox"));
+    await user.type(screen.getByLabelText("启动验证码"), "654321");
+    await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("请检查服务启动日志");
+    expect(screen.queryByRole("heading", { name: "拍一张今天的你" })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("启动验证码"));
+    await user.type(screen.getByLabelText("启动验证码"), "123456");
+    await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
+    expect(await screen.findByRole("heading", { name: "拍一张今天的你" })).toBeInTheDocument();
+    expect(authorize).toHaveBeenNthCalledWith(1, "654321");
+    expect(authorize).toHaveBeenNthCalledWith(2, "123456");
   });
 
   it("完成选择、预览、确认、可信结果和重新体验", async () => {
     const user = userEvent.setup();
     const analyze = vi.fn().mockResolvedValue(successResult);
-    render(<App analyze={analyze} />);
+    render(<App analyze={analyze} authorize={vi.fn().mockResolvedValue(undefined)} />);
 
     await reachPreview(user);
     await user.click(screen.getByRole("button", { name: "确认并生成故事" }));
@@ -100,7 +131,7 @@ describe("移动端核心体验", () => {
         requestId: "request-2",
       }),
     );
-    render(<App analyze={analyze} />);
+    render(<App analyze={analyze} authorize={vi.fn().mockResolvedValue(undefined)} />);
 
     await reachPreview(user);
     await user.click(screen.getByRole("button", { name: "确认并生成故事" }));
@@ -115,9 +146,10 @@ describe("移动端核心体验", () => {
   it("在上传前拒绝无效图片", async () => {
     const user = userEvent.setup({ applyAccept: false });
     const analyze = vi.fn();
-    render(<App analyze={analyze} />);
+    render(<App analyze={analyze} authorize={vi.fn().mockResolvedValue(undefined)} />);
     await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "开始拍照" }));
+    await user.type(screen.getByLabelText("启动验证码"), "123456");
+    await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
     await user.upload(
       screen.getByLabelText("从相册选择照片"),
       new File(["文本"], "note.txt", { type: "text/plain" }),
