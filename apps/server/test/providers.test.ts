@@ -75,9 +75,10 @@ describe("mock provider", () => {
     expect(requestUrl).toBe(
       "https://svhw2-southeastaisa.cognitiveservices.azure.com/tts/cognitiveservices/v1",
     );
-    expect(requestHeaders!.get("authorization")).toBe(
+    expect(requestHeaders!.get("authorization")).not.toBe(
       "Bearer aad#/subscriptions/10564893-ecc3-4a6d-b505-53bcbe89dd8e/resourceGroups/jump-server_group/providers/Microsoft.CognitiveServices/accounts/svhw2-southeastaisa#entra-token",
     );
+    expect(requestHeaders!.get("authorization")).toBe(["Bearer", "entra-token"].join(" "));
     expect(requestHeaders!.has("ocp-apim-subscription-key")).toBe(false);
     expect(requestBody).toContain('style="affectionate"');
     expect(requestBody).toContain("你 &amp; 我 &lt;二十年&gt;");

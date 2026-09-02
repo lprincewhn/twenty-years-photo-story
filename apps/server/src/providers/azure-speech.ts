@@ -38,7 +38,7 @@ export class AzureSpeechProvider implements NarrationProvider {
       {
         method: "POST",
         headers: {
-          authorization: `Bearer aad#${this.config.resourceId}#${accessToken.token}`,
+          authorization: ["Bearer", accessToken.token].join(" "),
           "content-type": "application/ssml+xml",
           "user-agent": "twenty-years-photo-story",
           "x-microsoft-outputformat": "audio-24khz-48kbitrate-mono-mp3",
