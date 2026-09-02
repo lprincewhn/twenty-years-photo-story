@@ -67,6 +67,52 @@ describe("Azure Foundry provider", () => {
       (body.response_format as { type: string }).type === "json_schema")).toBe(true);
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
+    const storyMessages = bodies[1]!.messages as Array<{ role: string; content: string }>;
+    expect(storyMessages[0]!.content).toContain("严格执行用户消息中的本次创意坐标");
+    expect(storyMessages[0]!.content).toContain("未寄出的明信片");
+    const storyInput = JSON.parse(storyMessages[1]!.content) as {
+      creativeDirection: Record<string, string>;
+      variationId: string;
+    };
+    expect(Object.keys(storyInput.creativeDirection)).toEqual([
+      "perspective",
+      "structure",
+      "setting",
+      "rhythm",
+      "ending",
+    ]);
+    expect(storyInput.variationId).toBeTruthy();
+  });
+
+  it("连续调用时即使随机值相同也排除最近使用的创意坐标", async () => {
+    const inputs: Array<Record<string, unknown>> = [];
+    const client = new AzureFoundryClient(config, {
+      credential,
+      fetch: vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+        const request = JSON.parse(String(init?.body)) as {
+          messages: Array<{ content: string }>;
+        };
+        inputs.push(JSON.parse(request.messages[1]!.content) as Record<string, unknown>);
+        return completion({
+          title: "灯光下的重逢",
+          content: "你听见一声轻响，二十年的光阴在这个虚构瞬间里轻轻交汇。",
+        });
+      }) as typeof globalThis.fetch,
+    });
+    let variationNumber = 0;
+    const provider = new AzureFoundryStoryProvider(client, {
+      randomIndex: () => 0,
+      variationId: () => `variation-${variationNumber += 1}`,
+    });
+
+    await provider.generate([]);
+    await provider.generate([]);
+
+    expect(inputs[0]!.creativeDirection).not.toEqual(inputs[1]!.creativeDirection);
+    expect(inputs.map((input) => input.variationId)).toEqual([
+      "variation-1",
+      "variation-2",
+    ]);
   });
 
   it.each([
