@@ -69,6 +69,7 @@ describe("Azure Foundry provider", () => {
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
     const storyMessages = bodies[1]!.messages as Array<{ role: string; content: string }>;
     expect(storyMessages[0]!.content).toContain("严格执行用户消息中的本次创意坐标");
+    expect(storyMessages[0]!.content).toContain("轻松、搞笑、抖梗");
     expect(storyMessages[0]!.content).toContain("未寄出的明信片");
     const storyInput = JSON.parse(storyMessages[1]!.content) as {
       creativeDirection: Record<string, string>;

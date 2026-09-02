@@ -318,7 +318,7 @@ export class AzureFoundryStoryProvider implements StoryProvider {
       {
         role: "system",
         content:
-          "根据给定的可见差异创作温暖、克制的中文短故事。" +
+          "根据给定的可见差异创作轻松、搞笑、抖梗的中文短故事。" +
           "必须始终用第二人称“你”讲述，正文至少出现一次“你”；" +
           "故事必须明确连接二十年前与现在，正文必须包含“二十年”；" +
           "不得使用展示名，也不得以“他”“她”或“人物”指代故事主人公。" +
