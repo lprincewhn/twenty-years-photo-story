@@ -1,4 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { extname, resolve, sep } from "node:path";
@@ -25,7 +26,14 @@ import {
   type ProviderSet,
 } from "./providers/types.js";
 
-const peopleAssetsDirectory = fileURLToPath(new URL("./assets/people", import.meta.url));
+// The real asset directory is untracked, so fall back to the committed demo
+// assets when it is absent (fresh clone). Keep this in step with
+// loadPeopleLibrary, which resolves the matching people.json the same way.
+const peopleAssetsDirectory = fileURLToPath(
+  existsSync(new URL("./assets/people", import.meta.url))
+    ? new URL("./assets/people", import.meta.url)
+    : new URL("./seed/assets/people", import.meta.url),
+);
 const validRequestId = /^[A-Za-z0-9_-]{1,64}$/;
 const photoContentTypes: Readonly<Record<string, string>> = {
   ".jpeg": "image/jpeg",

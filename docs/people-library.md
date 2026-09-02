@@ -2,7 +2,9 @@
 
 ## 默认演示资料
 
-`apps/server/src/people.json` 只有 `demo-xiaoxia`，对应服务端私有目录 `apps/server/src/assets/people/demo-xiaoxia-old.svg`。该 SVG 由项目代码中的几何图形组成，标注“示例插画 · 非真实人物”，不构成真实人脸或身份材料。
+仓库只提交演示种子：`apps/server/src/seed/people.json` 里只有 `demo-xiaoxia`，对应 `apps/server/src/seed/assets/people/demo-xiaoxia-old.svg`。该 SVG 由项目代码中的几何图形组成，标注“示例插画 · 非真实人物”，不构成真实人脸或身份材料。
+
+真实人物库位于 `apps/server/src/people.json` 与服务端私有目录 `apps/server/src/assets/people/`，两者都不入版本库（见 `.gitignore`），只存在于部署机上。运行时在两者缺失时自动回落到种子，因此全新 clone 可以直接构建、测试和以 mock 模式启动。
 
 ## 禁止事项
 
@@ -24,7 +26,7 @@
 6. 由第二位审核者核对图片与授权记录；脚本通过 Managed Identity 在 Azure LargePersonGroup 中建立独立 person 与 persisted face。
 7. 使用非生产副本运行阈值校准、误匹配测试与删除演练。
 
-完成授权与人工检查后，先用 Azure Detect 获取人脸序号，再用可重复的 `--member` 将合影成员与 `faceIndex` 对应。脚本只接受 `qualityForRecognition=high`，自动使用 Detect 返回的矩形，执行几何防跨脸校验、Create Person、Add Face、Train 和入库后 Detect + Identify 自检：
+完成授权与人工检查后，先用 Azure Detect 获取人脸序号，再用可重复的 `--member` 将合影成员与 `faceIndex` 对应。脚本只接受 `qualityForRecognition` 为 `high` 或 `medium`（`low` 与缺失一律拒绝），自动使用 Detect 返回的矩形，执行几何防跨脸校验、Create Person、Add Face、Train 和入库后 Detect + Identify 自检：
 
 ```bash
 npm run people -w @photo-story/server -- add \

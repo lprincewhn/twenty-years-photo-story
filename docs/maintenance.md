@@ -35,7 +35,7 @@
 
 ## 人物库运维
 
-多人物照片通过可重复 `--member <personId>:<displayName>:<faceIndex>` 登记。脚本先 Detect，只接受 `qualityForRecognition=high` 的索引，并检查边界、单中心点、覆盖率和跨脸重叠；不允许手输未经 Detect 的坐标。Create Person、Add Face、Train 完成后，脚本重新 Detect 并按每批最多 10 张脸 Identify，只有所有 Top-1 都与登记成员一致才写本地元数据；失败会清理本轮新建 person 并重训。
+多人物照片通过可重复 `--member <personId>:<displayName>:<faceIndex>` 登记。脚本先 Detect，只接受 `qualityForRecognition` 为 `high` 或 `medium` 的索引，并检查边界、单中心点、覆盖率和跨脸重叠；不允许手输未经 Detect 的坐标。Create Person、Add Face、Train 完成后，脚本重新 Detect 并按每批最多 10 张脸 Identify，只有所有 Top-1 都与登记成员一致才写本地元数据；失败会清理本轮新建 person 并重训。
 
 `sync` 以本地 v2 `people.json` 和私有照片为准重建 Azure person/face、训练并自检，用于灾恢和漂移修复。模型升级不能就地混用：先评审并重建容器，再全量 sync。
 

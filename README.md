@@ -64,7 +64,7 @@ Azure Face 与 Microsoft Foundry 只使用 `DefaultAzureCredential`/Managed Iden
 
 ## 人物库准备
 
-人物元数据位于 `apps/server/src/people.json`，图片位于服务端私有目录 `apps/server/src/assets/people/`，仅在成功匹配后通过短时授权端点读取。默认 SVG 是自制占位插画。导入真实材料前必须取得可审计的用途授权、记录来源和删除期限，并由人工检查资料与授权一一对应。完整步骤见 `docs/people-library.md`。
+人物元数据位于 `apps/server/src/people.json`，图片位于服务端私有目录 `apps/server/src/assets/people/`，仅在成功匹配后通过短时授权端点读取。两者都不入版本库，只存在于部署机上；全新 clone 会自动回落到提交在仓库里的演示种子 `apps/server/src/seed/`（自制占位 SVG，非真实人物），因此无需真实资料即可构建、测试和以 mock 模式运行。导入真实材料前必须取得可审计的用途授权、记录来源和删除期限，并由人工检查资料与授权一一对应。完整步骤见 `docs/people-library.md`。
 
 ## 测试与构建
 

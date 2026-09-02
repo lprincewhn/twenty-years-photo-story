@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { z } from "zod";
 
@@ -213,9 +213,16 @@ export function parsePeople(input: unknown): ResolvedPersonEntry[] {
 }
 
 const peoplePath = new URL("./people.json", import.meta.url);
+/**
+ * Committed demo library. Real people.json is untracked (it holds authorized
+ * photos and face coordinates), so a fresh clone has none — without this
+ * fallback the app cannot start and most tests fail.
+ */
+const seedPeoplePath = new URL("./seed/people.json", import.meta.url);
 
 export function loadPeopleLibrary(): PeopleLibrary {
-  return parsePeopleLibrary(JSON.parse(readFileSync(peoplePath, "utf8")));
+  const path = existsSync(peoplePath) ? peoplePath : seedPeoplePath;
+  return parsePeopleLibrary(JSON.parse(readFileSync(path, "utf8")));
 }
 
 export function loadPeople(): ResolvedPersonEntry[] {
