@@ -16,7 +16,7 @@ SVHW-16 的可运行移动端 H5 MVP：用户明确授权后拍摄或选择当�
 - 预览、重拍、确认后才上传和重新体验
 - 可替换的人脸匹配、可见差异分析、故事生成三个 provider 接口
 - Azure Speech 情感语音合成，结果生成后自动朗读并保留播放控件
-- 默认阈值 0.82，并展示分数、阈值与置信级别
+- 默认阈值 0.6，并展示分数、阈值与置信级别
 - 只允许发型、服饰、表情、配饰四类客观可见差异
 - 成功、相机拒绝、无效图片、无人脸、多人脸、未匹配、网络和 provider 失败中文状态
 - 移动端优先的键盘焦点、状态播报、触控尺寸、对比度与减少动画支持
@@ -38,7 +38,7 @@ SVHW-16 的可运行移动端 H5 MVP：用户明确授权后拍摄或选择当�
 - `apps/web`：React 19、Vite、原生 CSS
 - `apps/server`：Express 5、Multer 内存上传、可注入 provider
 - `specs/001-photo-story-mvp`：Spec Kit 规范、计划、任务、研究、数据模型、契约和快速开始
-- `docs`：接口、部署、人物库与维护说明
+- `docs`：接口、部署、人物库、维护说明与 GPT 故事提示词
 
 ## 本地运行
 
@@ -57,19 +57,19 @@ npm run dev
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `PORT` | `3000` | API 监听端口 |
-| `PROVIDER_MODE` | `mock` | `mock` 可直接演示；`real` 需先实现适配器 |
-| `MATCH_THRESHOLD` | `0.82` | 服务端匹配阈值，允许 0.50～0.99 |
+| `PROVIDER_MODE` | `mock` | `mock` 可直接演示；`real` 使用 Azure Face 与 Foundry GPT-5.6 |
+| `MATCH_THRESHOLD` | `0.6` | 服务端匹配阈值，允许 0.50～0.99 |
 | `ALLOWED_ORIGIN` | `http://localhost:5173` | 允许的前端来源 |
 | `AZURE_SPEECH_ENDPOINT` | 未设置 | Azure Speech 自定义终结点；与 Resource ID 同时配置 |
 | `AZURE_SPEECH_RESOURCE_ID` | 未设置 | Speech 资源的完整 Azure Resource ID |
 | `AZURE_SPEECH_VOICE` | `zh-CN-XiaoxiaoNeural` | 中文神经语音 |
 | `AZURE_SPEECH_STYLE` | `affectionate` | Azure 情感朗读样式 |
 
-Speech 使用 `DefaultAzureCredential` 完成 Entra ID 鉴权，不读取资源密钥。本地进程可复用 `az login`，Azure 主机可使用托管身份，自动化环境可注入服务主体。调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。其他真实 provider 密钥只能配置在服务端秘密管理中，不能带 `VITE_` 前缀、不能写入前端、不能提交。
+Azure Face、Microsoft Foundry 与 Speech 都只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。Speech 可独立启用，调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。`.env.example` 列出了 Face v1.2、GPT-5.6 Terra、Speech、60 秒 faceId TTL 和阈值配置。
 
 ## 人物库准备
 
-人物元数据位于 `apps/server/src/people.json`，图片位于服务端私有目录 `apps/server/src/assets/people/`，仅在成功匹配后通过短时授权端点读取。默认 SVG 是自制占位插画。导入真实材料前必须取得可审计的用途授权、记录来源和删除期限，并由人工检查资料与授权一一对应。完整步骤见 `docs/people-library.md`。
+人物元数据位于 `apps/server/src/people.json`，图片位于服务端私有目录 `apps/server/src/assets/people/`，仅在成功匹配后通过短时授权端点读取。两者都不入版本库，只存在于部署机上；全新 clone 会自动回落到提交在仓库里的演示种子 `apps/server/src/seed/`（自制占位 SVG，非真实人物），因此无需真实资料即可构建、测试和以 mock 模式运行。导入真实材料前必须取得可审计的用途授权、记录来源和删除期限，并由人工检查资料与授权一一对应。完整步骤见 `docs/people-library.md`。
 
 ## 测试与构建
 

@@ -28,7 +28,7 @@ NODE_ENV=production
 HOST=127.0.0.1
 PORT=3000
 PROVIDER_MODE=mock
-MATCH_THRESHOLD=0.82
+MATCH_THRESHOLD=0.6
 ALLOWED_ORIGIN=https://photo.example.com
 PEOPLE_ASSET_SECRET=使用秘密管理生成并注入的至少32字符随机值
 GRANT_TTL_SECONDS=300
@@ -38,7 +38,32 @@ AZURE_SPEECH_VOICE=zh-CN-XiaoxiaoNeural
 AZURE_SPEECH_STYLE=affectionate
 ```
 
-演示环境可使用 mock。Azure Speech 可独立接入：`AZURE_SPEECH_ENDPOINT` 与 `AZURE_SPEECH_RESOURCE_ID` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。Speech 通过 `DefaultAzureCredential` 获取 `https://cognitiveservices.azure.com/.default` Token，不使用资源 Key。本地先执行 `az login --tenant 16b3c013-d300-468d-ac64-7eda0820b6d3` 并选择 MCAPS 订阅；目标身份须在资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor`。生产真实分析能力上线前必须实现并评审三个分析 provider 适配器，再把 `PROVIDER_MODE` 改为 `real`。
+演示环境可使用 mock。real 模式使用 Azure Face 完成人物匹配，并使用 Microsoft Foundry GPT-5.6 Terra 完成可见差异分析与虚构故事生成；任一 provider 配置不完整都会拒绝启动或明确返回 `PROVIDER_UNAVAILABLE`，绝不回落到 mock。
+
+Azure Speech 可独立接入：`AZURE_SPEECH_ENDPOINT` 与 `AZURE_SPEECH_RESOURCE_ID` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。Speech 通过 `DefaultAzureCredential` 获取 `https://cognitiveservices.azure.com/.default` Token，不使用资源 Key。目标身份须在资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor`。
+
+Azure Face **只能通过 Entra ID / Managed Identity** 使用，不配置 API key。本地维护使用 `az login`，生产进程启用系统或用户指派 MI；运行时和人物入库脚本统一在 Face 资源范围授予 **Cognitive Services Face Contributor**。`Cognitive Services Face Recognizer` 不包含 LargePersonGroup 管理权限，不能用于本部署。授权后 RBAC 可能传播数分钟，启动自检会以 5 次、每次 6 秒重试 401/传播期 `PermissionDenied`。
+
+real 模式服务端配置：
+
+```text
+PROVIDER_MODE=real
+MATCH_THRESHOLD=0.6
+AZURE_FACE_ENDPOINT=https://<resource>.cognitiveservices.azure.com
+AZURE_FACE_API_VERSION=v1.2
+AZURE_FACE_GROUP_ID=photo-story-people
+AZURE_FACE_DETECTION_MODEL=detection_03
+AZURE_FACE_RECOGNITION_MODEL=recognition_04
+AZURE_FACE_ID_TTL_SECONDS=60
+AZURE_FACE_IDENTIFY_THRESHOLD=0.5
+AZURE_FACE_MAX_CANDIDATES=5
+AZURE_FACE_TIMEOUT_MS=8000
+AZURE_FOUNDRY_ENDPOINT=https://<ai-services-resource>.cognitiveservices.azure.com
+AZURE_FOUNDRY_DEPLOYMENT=gpt-5.6-terra
+AZURE_FOUNDRY_TIMEOUT_MS=60000
+```
+
+用户指派 MI 另设 `AZURE_CLIENT_ID`。同一身份还需在 Foundry 资源上具备 `Cognitive Services OpenAI User`。`AZURE_FACE_IDENTIFY_THRESHOLD` 必须严格小于 `MATCH_THRESHOLD`。这些变量均不得使用 `VITE_` 前缀。进程启动会读取容器及训练状态并校验 `recognition_04`；失败即拒绝启动，不静默降级。
 
 ## 反向代理要求
 
@@ -56,6 +81,8 @@ AZURE_SPEECH_STYLE=affectionate
 - 不挂载上传卷，不创建照片缓存目录。
 - 禁用包含进程内存的自动崩溃转储；评估交换空间和 APM 请求体采集。
 - APM、WAF、反向代理均禁用请求/响应体采样。
+- 人脸模板持久化在 Azure Face（southeastasia）。授权文案必须写明目的、保留期限、撤回渠道以及撤回后 30 天内删除并重训生效的承诺。
+- 人物库旧照与本次上传照片会在请求期间发送到 Foundry 模型做可见差异分析；必须确认模型部署的数据处理区域与授权范围一致，并关闭网关、APM 和模型调用层的请求体记录。
 - 真实供应商必须承诺不训练、最短保留与可验证删除，并限定处理地域。
 - 只保留匿名运行指标；任何新增持久化必须重新取得用户授权并更新文档。
 
@@ -85,4 +112,4 @@ curl -I https://photo.example.com/
 
 ## 回滚
 
-静态站与 API 使用可追踪版本镜像。回滚时同时回退前端与 API 契约兼容版本；本 MVP 无数据库迁移。发生疑似照片泄露时应立即停止入口、关闭可能采集请求体的日志/APM、轮换 provider 密钥并按事件响应流程通知负责人。
+静态站与 API 使用可追踪版本镜像。回滚时同时回退前端与 API 契约兼容版本；本 MVP 无数据库迁移。发生疑似照片泄露时应立即停止入口、关闭可能采集请求体的日志/APM、撤销或更换托管身份并按事件响应流程通知负责人。

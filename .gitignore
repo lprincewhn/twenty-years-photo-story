@@ -6,4 +6,5 @@ coverage/
 *.log
 .DS_Store
 .vite/
-
+/apps/server/src/people.json
+/apps/server/src/assets/people/

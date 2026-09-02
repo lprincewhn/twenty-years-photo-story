@@ -190,6 +190,14 @@ describe("照片故事 API", () => {
     expect(response.body.match.person.oldPhotoUrl).toBe(
       "/api/people/demo-xiaoxia/photo",
     );
+    expect(response.body.match.person).not.toHaveProperty("displayName");
+    expect(response.body.match.person.faceBox).toEqual({
+      left: 155 / 600,
+      top: 100 / 760,
+      width: 290 / 600,
+      height: 360 / 760,
+    });
+    expect(response.body.story.content).toContain("你");
     expect(response.headers["set-cookie"]?.[0]).toContain("ps_grant=");
     expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
     expect(response.headers["set-cookie"]?.[0]).toContain("Secure");

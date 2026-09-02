@@ -340,8 +340,24 @@ export function App({ analyze = analyzePhoto }: AppProps) {
             <h2 id="result-title">找到一张示例旧照</h2>
             <div className="photo-pair">
               <figure>
-                <img src={result.match.person.oldPhotoUrl} alt="自制几何插画示例旧照" />
-                <figcaption>二十年前 · 示例占位图</figcaption>
+                <div className="matched-photo">
+                  <img src={result.match.person.oldPhotoUrl} alt="匹配到的旧照" />
+                  {result.match.person.faceBox && (
+                    <span
+                      className="face-highlight"
+                      aria-label="匹配人物位置"
+                      style={{
+                        left: `${result.match.person.faceBox.left * 100}%`,
+                        top: `${result.match.person.faceBox.top * 100}%`,
+                        width: `${result.match.person.faceBox.width * 100}%`,
+                        height: `${result.match.person.faceBox.height * 100}%`,
+                      }}
+                    >
+                      <span>你</span>
+                    </span>
+                  )}
+                </div>
+                <figcaption>二十年前 · 已框选匹配人物</figcaption>
               </figure>
               <figure>
                 {previewUrl ? <img src={previewUrl} alt="本次上传的当前照片" /> : null}
@@ -349,7 +365,6 @@ export function App({ analyze = analyzePhoto }: AppProps) {
               </figure>
             </div>
             <div className="confidence">
-              <strong>{result.match.person.displayName}</strong>
               <span>模拟匹配分数 {(result.match.score * 100).toFixed(0)}%</span>
               <span>结论阈值 {(result.match.threshold * 100).toFixed(0)}%</span>
             </div>
