@@ -18,23 +18,23 @@
 
 1. 取得照片中人物对“照片故事匹配演示”这一具体用途的书面授权。
 2. 记录授权人、材料来源、授权日期、用途、允许环境、到期日与撤回渠道；授权记录存放在受控系统，不能提交个人信息到本公开代码库。
-3. 检查照片中没有未授权旁人、位置水印、证件、联系方式等额外个人信息。
+3. 取得照片中**每一位人物**的同用途授权；一人未授权或撤回即整张合影停止用于 real 模式。另检查位置水印、证件、联系方式等额外个人信息。
 4. 生成最小化 WebP 版本，删除 EXIF/GPS，采用不可猜测文件名，并放入服务端私有 `assets/people` 目录；不得放入前端静态目录。
-5. 在 `people.json` 中增加唯一 `id`、适当的展示名、受控端点路径、私有资源文件名、`authorization: "authorized"` 与不含个人信息的来源说明。
-6. 由第二位审核者核对图片与授权记录；在真实 provider 的受控索引中建立同一 `personId`。
+5. 授权书明确说明人脸特征会持久化到 Azure Face（southeastasia）、用途、最短保留期限、撤回渠道，以及撤回后 30 天内删除并重训生效。
+6. 由第二位审核者核对图片与授权记录；脚本通过 Managed Identity 在 Azure LargePersonGroup 中建立独立 person 与 persisted face。
 7. 使用非生产副本运行阈值校准、误匹配测试与删除演练。
 
-完成授权与人工检查后，使用服务端管理脚本写入资料。脚本会校验人物 ID 和图片签名，将照片以不可猜测文件名复制到服务端私有目录，并原子更新人物元数据：
+完成授权与人工检查后，先用 Azure Detect 获取人脸序号，再用可重复的 `--member` 将合影成员与 `faceIndex` 对应。脚本只接受 `qualityForRecognition=high`，自动使用 Detect 返回的矩形，执行几何防跨脸校验、Create Person、Add Face、Train 和入库后 Detect + Identify 自检：
 
 ```bash
 npm run people -w @photo-story/server -- add \
-  --id person-id \
-  --display-name "批准的展示名" \
   --photo ./approved-photo.webp \
-  --source-note "已完成特定用途授权；详细记录保存在受控授权系统。"
+  --source-note "全员已完成特定用途授权；记录在受控系统。" \
+  --member person-a:"批准的展示名甲":0 \
+  --member person-b:"批准的展示名乙":1
 ```
 
-支持 JPEG、PNG 和 WebP，单张不超过 6 MiB。`authorization` 默认为 `authorized`；自制演示资料可显式传入 `--authorization placeholder`。
+支持 JPEG、PNG 和 WebP，单张不超过 6 MiB。成员序号从 0 开始且不得重复。real 模式强制全员 `authorized`。单人物 mock/占位资料仍可使用 `--id`、`--display-name` 和 `--authorization placeholder` 的兼容形式。
 
 查询全部人物或单个人物：
 
@@ -43,27 +43,46 @@ npm run people -w @photo-story/server -- list
 npm run people -w @photo-story/server -- get person-id
 ```
 
-示例元数据（不应直接用于真实人物）：
+v2 元数据将照片提升为一等实体；Azure UUID 仅供运维，不进入 API 响应或日志：
 
 ```json
 {
-  "id": "内部不可识别标识",
-  "displayName": "已批准的展示名",
-  "oldPhotoUrl": "/api/people/内部不可识别标识/photo",
-  "oldPhotoFile": "不可猜测资源名.webp",
-  "authorization": "authorized",
-  "sourceNote": "已完成特定用途授权；详细记录保存在受控授权系统。"
+  "schemaVersion": 2,
+  "photos": [{
+    "id": "photo-id",
+    "file": "不可猜测资源名.webp",
+    "mimeType": "image/webp",
+    "width": 800,
+    "height": 534,
+    "sourceNote": "授权记录在受控系统",
+    "members": [{
+      "personId": "person-a",
+      "faceBox": { "left": 20, "top": 30, "width": 100, "height": 120 },
+      "azurePersistedFaceId": "Azure UUID"
+    }]
+  }],
+  "people": [{
+    "id": "person-a",
+    "displayName": "批准的展示名",
+    "photoId": "photo-id",
+    "oldPhotoUrl": "/api/people/person-a/photo",
+    "authorization": "authorized",
+    "sourceNote": "授权记录在受控系统",
+    "azurePersonId": "Azure UUID"
+  }]
 }
 ```
 
+旧版顶层人物数组会在读取时兼容升级为“一人一照片”；下一次管理脚本写入会保存为 v2。
+
 ## 删除与撤回
 
-收到撤回后立即从服务端私有资源目录、人物 JSON、真实 provider 索引和备份轮换计划中删除，并记录完成时间。受控端点不允许 CDN 缓存，因此删除后立即停止提供文件；已经签发的 grant 最多在 `GRANT_TTL_SECONDS`（默认 5 分钟）后失效，且因人物条目已删除无法继续读取。若无法立即删除备份，应停止恢复使用并在既定最短周期内过期。现场照片不在人物库或备份中，因此正常情况下没有现场照片删除工单。
+收到撤回后立即执行删除并记录完成时间。脚本会删除 Azure persistedFace 与 person，触发 Train 并等待成功；Azure 的 DELETE 本身不足以让 Identify 停止命中，**只有重训成功才算完成**。训练失败时命令非零退出并要求运行 `sync`，不得向授权主体宣称已删除。受控端点不允许 CDN 缓存；任一合影成员撤回时，real 模式全员授权门禁会停止整张原图投放。
 
-脚本会同时删除人物条目和对应的私有照片：
+共享照片在仍有其他成员时保留，最后一名成员删除后才清理本地文件：
 
 ```bash
 npm run people -w @photo-story/server -- delete person-id
 ```
 
-脚本不管理真实 provider 索引、授权记录或备份，执行后仍需按上述撤回流程完成这些外部系统的清理。
+灾恢、模型升级或发现本地/Azure 漂移时执行 `npm run people -w @photo-story/server -- sync`，它会重建 person/face、训练并逐脸自检。脚本不删除受控授权记录或备份，仍需按保留策略处理这些系统。
