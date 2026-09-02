@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isPhotoFullyAuthorized, parsePeople, parsePeopleLibrary } from "../src/people.js";
 
@@ -61,5 +62,20 @@ describe("人物库 v2 schema", () => {
       oldPhotoFile: "legacy.webp",
       azurePersonId: null,
     });
+  });
+
+  it("内置 seed 人物库可解析，且其照片文件随仓库提交", () => {
+    // people.json and assets/people/ are untracked (they hold authorized photos
+    // and face coordinates), so a fresh clone only has the seed. If the seed is
+    // missing or unparseable, the app cannot start and most tests fail.
+    const seedUrl = new URL("../src/seed/people.json", import.meta.url);
+    const library = parsePeopleLibrary(JSON.parse(readFileSync(seedUrl, "utf8")));
+    expect(library.people.length).toBeGreaterThan(0);
+    for (const photo of library.photos) {
+      expect(existsSync(new URL(`../src/seed/assets/people/${photo.file}`, import.meta.url)))
+        .toBe(true);
+    }
+    // The seed must stay a placeholder: no real faces belong in a public repo.
+    expect(library.people.every((person) => person.authorization === "placeholder")).toBe(true);
   });
 });
