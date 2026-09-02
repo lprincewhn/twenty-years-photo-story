@@ -8,8 +8,10 @@ import {
 import {
   analyzePhoto,
   ApiClientError,
+  authorizeAccess,
   type AnalyzePhoto,
   type ApiErrorInfo,
+  type AuthorizeAccess,
   type DemoCase,
   type ExperienceResult,
 } from "./api";
@@ -28,6 +30,7 @@ const categoryNames = {
 
 interface AppProps {
   analyze?: AnalyzePhoto;
+  authorize?: AuthorizeAccess;
 }
 
 function localError(
@@ -38,10 +41,15 @@ function localError(
   return { code, message, explanation, retryable: true };
 }
 
-export function App({ analyze = analyzePhoto }: AppProps) {
+export function App({
+  analyze = analyzePhoto,
+  authorize = authorizeAccess,
+}: AppProps) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [consent, setConsent] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
   const [consentError, setConsentError] = useState("");
+  const [authorizing, setAuthorizing] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [narrationUrl, setNarrationUrl] = useState("");
@@ -94,14 +102,32 @@ export function App({ analyze = analyzePhoto }: AppProps) {
     [],
   );
 
-  const begin = () => {
+  const begin = async () => {
     if (!consent) {
       setConsentError("请先主动勾选授权，再开始拍照。");
       window.setTimeout(() => consentErrorRef.current?.focus(), 0);
       return;
     }
+    if (!/^\d{6}$/.test(accessCode)) {
+      setConsentError("请输入服务启动日志中的 6 位数字验证码。");
+      window.setTimeout(() => consentErrorRef.current?.focus(), 0);
+      return;
+    }
+    setAuthorizing(true);
     setConsentError("");
-    setPhase("capture");
+    try {
+      await authorize(accessCode);
+      setPhase("capture");
+    } catch (caught) {
+      setConsentError(
+        caught instanceof ApiClientError
+          ? caught.info.explanation
+          : "无法验证验证码，请检查网络后重试。",
+      );
+      window.setTimeout(() => consentErrorRef.current?.focus(), 0);
+    } finally {
+      setAuthorizing(false);
+    }
   };
 
   const startCamera = async () => {
@@ -211,6 +237,7 @@ export function App({ analyze = analyzePhoto }: AppProps) {
     setResult(null);
     setError(null);
     setConsent(false);
+    setAccessCode("");
     setConsentError("");
     setCameraMessage("");
     setDemoCase("success");
@@ -258,8 +285,27 @@ export function App({ analyze = analyzePhoto }: AppProps) {
               />
               <span>我已阅读并同意为本次体验拍摄或选择照片并上传分析。</span>
             </label>
+            <label className="access-code">
+              <span>启动验证码</span>
+              <input
+                type="text"
+                aria-label="启动验证码"
+                value={accessCode}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="\d{6}"
+                maxLength={6}
+                aria-describedby={consentError ? "authorization-error" : undefined}
+                onChange={(event) => {
+                  setAccessCode(event.target.value.replace(/\D/g, "").slice(0, 6));
+                  if (consentError) setConsentError("");
+                }}
+              />
+              <small>请输入服务启动日志中显示的 6 位验证码。</small>
+            </label>
             {consentError && (
               <p
+                id="authorization-error"
                 className="inline-error"
                 role="alert"
                 tabIndex={-1}
@@ -268,8 +314,13 @@ export function App({ analyze = analyzePhoto }: AppProps) {
                 {consentError}
               </p>
             )}
-            <button className="primary" type="button" onClick={begin}>
-              开始拍照
+            <button
+              className="primary"
+              type="button"
+              onClick={() => void begin()}
+              disabled={authorizing}
+            >
+              {authorizing ? "正在验证…" : "验证并开始拍照"}
             </button>
           </section>
         )}

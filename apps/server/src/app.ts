@@ -52,6 +52,7 @@ const demoCases = new Set<DemoCase>([
 export interface AppDependencies {
   config: AppConfig;
   providers: ProviderSet;
+  accessCode: string;
 }
 
 interface PhotoGrant {
@@ -122,6 +123,17 @@ function verifyGrant(token: string | undefined, personId: string, secret: string
   } catch {
     return false;
   }
+}
+
+function accessToken(accessCode: string, secret: string): string {
+  return createHmac("sha256", secret).update(accessCode).digest("base64url");
+}
+
+function matchesAccessCode(candidate: unknown, accessCode: string): boolean {
+  if (typeof candidate !== "string" || !/^\d{6}$/.test(candidate)) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(candidate), Buffer.from(accessCode));
 }
 
 function zeroingMemoryStorage(): multer.StorageEngine {
@@ -195,7 +207,7 @@ async function cropMatchedPerson(
     .toBuffer();
 }
 
-export function createApp({ config, providers }: AppDependencies) {
+export function createApp({ config, providers, accessCode }: AppDependencies) {
   const app = express();
   const peopleLibrary = loadPeopleLibrary();
   const people = resolvePeople(peopleLibrary);
@@ -222,6 +234,58 @@ export function createApp({ config, providers }: AppDependencies) {
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok", providerMode: config.providerMode });
   });
+
+  const authorizationLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (_request, response) => {
+      sendError(
+        response,
+        new AppError(
+          429,
+          "RATE_LIMITED",
+          "验证码尝试过于频繁",
+          "请稍候一分钟再试。",
+          true,
+        ),
+      );
+    },
+  });
+
+  app.post(
+    "/api/authorize",
+    authorizationLimiter,
+    express.json({ limit: "1kb" }),
+    (request, response) => {
+      if (typeof request.body?.code !== "string" || !/^\d{6}$/.test(request.body.code)) {
+        throw new AppError(
+          400,
+          "AUTH_CODE_REQUIRED",
+          "请输入 6 位验证码",
+          "验证码可在服务启动日志中查看。",
+          true,
+        );
+      }
+      if (!matchesAccessCode(request.body.code, accessCode)) {
+        throw new AppError(
+          401,
+          "AUTH_CODE_INVALID",
+          "验证码不正确",
+          "请检查服务启动日志中的 6 位验证码后重试。",
+          true,
+        );
+      }
+      response.cookie("ps_access", accessToken(accessCode, config.peopleAssetSecret), {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/api",
+      });
+      response.status(204).end();
+    },
+  );
 
   const experienceLimiter = rateLimit({
     windowMs: 60_000,
@@ -322,6 +386,24 @@ export function createApp({ config, providers }: AppDependencies) {
   app.post(
     "/api/experience",
     experienceLimiter,
+    (request, _response, next) => {
+      const expectedToken = accessToken(accessCode, config.peopleAssetSecret);
+      const candidateToken = readCookie(request, "ps_access");
+      if (
+        !candidateToken ||
+        candidateToken.length !== expectedToken.length ||
+        !timingSafeEqual(Buffer.from(candidateToken), Buffer.from(expectedToken))
+      ) {
+        throw new AppError(
+          401,
+          "AUTHORIZATION_REQUIRED",
+          "请先通过验证码授权",
+          "返回授权页面，输入服务启动日志中的验证码后再使用。",
+          false,
+        );
+      }
+      next();
+    },
     upload.single("photo"),
     async (request, response) => {
       const bytes = request.file?.buffer;

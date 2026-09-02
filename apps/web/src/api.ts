@@ -63,6 +63,38 @@ export class ApiClientError extends Error {
   }
 }
 
+export type AuthorizeAccess = (code: string) => Promise<void>;
+
+export const authorizeAccess: AuthorizeAccess = async (code) => {
+  let response: Response;
+  try {
+    response = await fetch("/api/authorize", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+  } catch {
+    throw new ApiClientError({
+      code: "NETWORK_ERROR",
+      message: "网络连接失败",
+      explanation: "无法验证验证码，请检查网络后重试。",
+      retryable: true,
+    });
+  }
+
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: ApiErrorInfo };
+    throw new ApiClientError(
+      payload.error ?? {
+        code: "UNKNOWN_ERROR",
+        message: "暂时无法验证验证码",
+        explanation: "服务返回了无法识别的错误，请稍后重试。",
+        retryable: true,
+      },
+    );
+  }
+};
+
 export type AnalyzePhoto = (
   photo: File,
   consent: boolean,
