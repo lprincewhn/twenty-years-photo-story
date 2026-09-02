@@ -243,7 +243,7 @@ export function App({ analyze = analyzePhoto }: AppProps) {
               <li><strong>仅用于本次体验：</strong>现场照片在服务端内存中处理，响应后释放。</li>
               <li><strong>默认不留存：</strong>不落盘、不进入人物库、不用于训练。</li>
               <li><strong>谨慎表达：</strong>只描述发型、服饰、表情、配饰等可见特征。</li>
-              <li><strong>不是身份认证：</strong>mock 匹配只模拟产品流程，低于阈值不下结论。</li>
+              <li><strong>不是身份认证：</strong>匹配仅用于寻找外貌相近的旧照，低于阈值不下结论。</li>
               <li><strong>故事是虚构：</strong>生成内容会显著标记“AI 创作/虚构”。</li>
             </ul>
             <label className="consent">
@@ -305,9 +305,9 @@ export function App({ analyze = analyzePhoto }: AppProps) {
             </div>
             {import.meta.env.DEV && (
               <details className="demo-options">
-                <summary>演示其他识别状态</summary>
+                <summary>切换其他识别状态</summary>
                 <label>
-                  演示状态
+                  识别状态
                   <select
                     value={demoCase}
                     onChange={(event) => setDemoCase(event.target.value as DemoCase)}
@@ -319,7 +319,7 @@ export function App({ analyze = analyzePhoto }: AppProps) {
                     <option value="provider-error">分析服务暂不可用</option>
                   </select>
                 </label>
-                <p>此选项只控制无密钥 mock，用于验收中文失败状态。</p>
+                <p>此选项用于验收中文失败状态。</p>
               </details>
             )}
           </section>
@@ -345,14 +345,14 @@ export function App({ analyze = analyzePhoto }: AppProps) {
           <section className="centered" aria-labelledby="upload-title" aria-live="polite">
             <div className="loader" aria-hidden="true" />
             <h2 id="upload-title">正在寻找时光线索…</h2>
-            <p>正在进行示例匹配、可见差异分析和虚构故事创作。</p>
+            <p>正在进行旧照匹配、可见差异分析和虚构故事创作。</p>
           </section>
         )}
 
         {phase === "result" && result && photo && (
           <section aria-labelledby="result-title">
             <p className="ai-badge">AI 创作/虚构 · 非真实经历</p>
-            <h2 id="result-title">找到一张示例旧照</h2>
+            <h2 id="result-title">找到一张旧照</h2>
             <div className="photo-pair">
               <figure>
                 <div className="matched-photo">
@@ -380,7 +380,7 @@ export function App({ analyze = analyzePhoto }: AppProps) {
               </figure>
             </div>
             <div className="confidence">
-              <span>模拟匹配分数 {(result.match.score * 100).toFixed(0)}%</span>
+              <span>匹配分数 {(result.match.score * 100).toFixed(0)}%</span>
               <span>结论阈值 {(result.match.threshold * 100).toFixed(0)}%</span>
             </div>
             <p className="source-note">{result.match.person.sourceNote}</p>
@@ -443,7 +443,7 @@ export function App({ analyze = analyzePhoto }: AppProps) {
       </main>
 
       <footer className="page-footer">
-        <p>演示人物为自制插画，不含未授权真实人物照片。</p>
+        <p>人物资料采用自制插画，不含未授权真实人物照片。</p>
       </footer>
     </div>
   );
