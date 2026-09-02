@@ -40,6 +40,7 @@ async function reachPreview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("checkbox"));
   await user.type(screen.getByLabelText("启动验证码"), "123456");
   await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
+  expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
   const photo = new File(["图片"], "today.jpg", { type: "image/jpeg" });
   await user.upload(screen.getByLabelText("从相册选择照片"), photo);
   expect(screen.getByAltText("待上传的当前照片预览")).toBeInTheDocument();
@@ -50,6 +51,8 @@ describe("移动端核心体验", () => {
     const user = userEvent.setup();
     render(<App authorize={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
+    render(<App />);
+    expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
     expect(screen.getByRole("alert")).toHaveTextContent("请先主动勾选授权");
     expect(screen.queryByRole("heading", { name: "拍一张今天的你" })).not.toBeInTheDocument();
   });
@@ -91,10 +94,11 @@ describe("移动端核心体验", () => {
     await reachPreview(user);
     await user.click(screen.getByRole("button", { name: "确认并生成故事" }));
 
-    expect(await screen.findByRole("heading", { name: "找到一张示例旧照" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "找到一张旧照" })).toBeInTheDocument();
     expect(screen.getAllByText(/AI 创作\/虚构/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("模拟匹配分数 94%")).toBeInTheDocument();
+    expect(screen.getByText("匹配分数 94%")).toBeInTheDocument();
     expect(screen.getByText("结论阈值 82%")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
     expect(screen.getByLabelText("故事情感朗读")).toHaveAttribute("src", "blob:本地预览");
     expect(screen.getByLabelText("故事情感朗读")).toHaveAttribute("autoplay");
     expect(URL.createObjectURL).toHaveBeenCalledWith(
@@ -106,7 +110,6 @@ describe("移动端核心体验", () => {
       width: "30%",
       height: "40%",
     });
-    expect(screen.queryByText("示例人物·小夏")).not.toBeInTheDocument();
     expect(screen.getByText("这是一则跨越二十年的温暖虚构故事。")).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");
 
