@@ -105,6 +105,45 @@ function decodeStoryDirection(index: number): StoryCreativeDirection {
 export interface AzureFoundryClientDependencies {
   credential?: TokenCredential;
   fetch?: typeof globalThis.fetch;
+  log?: (entry: AzureFoundryInteractionLog) => void;
+}
+
+export interface AzureFoundryInteractionLog {
+  event: "foundry.request" | "foundry.response";
+  interactionId: string;
+  schemaName: string;
+  deployment: string;
+  messageRoles?: string[];
+  imageMimeTypes?: string[];
+  outcome?: "success" | "error";
+  httpStatus?: number;
+  durationMs?: number;
+  responseBytes?: number;
+  errorCode?: string;
+}
+
+function summarizeMessages(messages: unknown[]): {
+  messageRoles: string[];
+  imageMimeTypes: string[];
+} {
+  const messageRoles: string[] = [];
+  const imageMimeTypes: string[] = [];
+  for (const message of messages) {
+    if (!message || typeof message !== "object") continue;
+    const record = message as Record<string, unknown>;
+    if (typeof record.role === "string") messageRoles.push(record.role);
+    if (!Array.isArray(record.content)) continue;
+    for (const item of record.content) {
+      if (!item || typeof item !== "object") continue;
+      const imageUrl = (item as Record<string, unknown>).image_url;
+      if (!imageUrl || typeof imageUrl !== "object") continue;
+      const url = (imageUrl as Record<string, unknown>).url;
+      if (typeof url !== "string") continue;
+      const match = /^data:([^;,]+);base64,/u.exec(url);
+      if (match?.[1]) imageMimeTypes.push(match[1]);
+    }
+  }
+  return { messageRoles, imageMimeTypes };
 }
 
 function providerError(retryable: boolean): AppError {
@@ -120,6 +159,7 @@ function providerError(retryable: boolean): AppError {
 export class AzureFoundryClient {
   private readonly credential: TokenCredential;
   private readonly fetchImplementation: typeof globalThis.fetch;
+  private readonly log: (entry: AzureFoundryInteractionLog) => void;
 
   constructor(
     private readonly config: AzureFoundryConfig,
@@ -131,6 +171,7 @@ export class AzureFoundryClient {
         : undefined,
     );
     this.fetchImplementation = dependencies.fetch ?? globalThis.fetch;
+    this.log = dependencies.log ?? ((entry) => console.info(`[foundry] ${JSON.stringify(entry)}`));
   }
 
   async complete(
@@ -141,9 +182,20 @@ export class AzureFoundryClient {
   ): Promise<unknown> {
     const token = await this.credential.getToken(cognitiveServicesScope);
     if (!token) throw providerError(true);
+    const interactionId = randomUUID();
+    const startedAt = Date.now();
+    const messageSummary = summarizeMessages(messages);
+    this.log({
+      event: "foundry.request",
+      interactionId,
+      schemaName,
+      deployment: this.config.deployment,
+      ...messageSummary,
+    });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
     const abortFromCaller = () => controller.abort();
+    let httpStatus: number | undefined;
     if (signal?.aborted) controller.abort();
     signal?.addEventListener("abort", abortFromCaller, { once: true });
     try {
@@ -167,6 +219,7 @@ export class AzureFoundryClient {
           }),
         },
       );
+      httpStatus = response.status;
       if (!response.ok) {
         if (response.status === 429) {
           throw new AppError(
@@ -184,7 +237,8 @@ export class AzureFoundryClient {
         throw providerError(false);
       }
       const responseText = await response.text();
-      if (Buffer.byteLength(responseText) > maxResponseBytes) {
+      const responseBytes = Buffer.byteLength(responseText);
+      if (responseBytes > maxResponseBytes) {
         throw providerError(false);
       }
       let responseBody: unknown;
@@ -196,11 +250,32 @@ export class AzureFoundryClient {
       const completion = completionSchema.safeParse(responseBody);
       if (!completion.success) throw providerError(true);
       try {
-        return JSON.parse(completion.data.choices[0]!.message.content) as unknown;
+        const result = JSON.parse(completion.data.choices[0]!.message.content) as unknown;
+        this.log({
+          event: "foundry.response",
+          interactionId,
+          schemaName,
+          deployment: this.config.deployment,
+          outcome: "success",
+          httpStatus,
+          durationMs: Date.now() - startedAt,
+          responseBytes,
+        });
+        return result;
       } catch {
         throw providerError(true);
       }
     } catch (error) {
+      this.log({
+        event: "foundry.response",
+        interactionId,
+        schemaName,
+        deployment: this.config.deployment,
+        outcome: "error",
+        ...(httpStatus === undefined ? {} : { httpStatus }),
+        durationMs: Date.now() - startedAt,
+        errorCode: error instanceof AppError ? error.code : "PROVIDER_UNAVAILABLE",
+      });
       if (error instanceof AppError) throw error;
       throw providerError(true);
     } finally {
@@ -318,7 +393,7 @@ export class AzureFoundryStoryProvider implements StoryProvider {
       {
         role: "system",
         content:
-          "根据给定的可见差异创作温暖、克制的中文短故事。" +
+          "根据给定的可见差异创作轻松、搞笑、抖梗的中文短故事。" +
           "必须始终用第二人称“你”讲述，正文至少出现一次“你”；" +
           "故事必须明确连接二十年前与现在，正文必须包含“二十年”；" +
           "不得使用展示名，也不得以“他”“她”或“人物”指代故事主人公。" +
