@@ -26,6 +26,7 @@ function completion(content: unknown, status = 200): Response {
 describe("Azure Foundry provider", () => {
   it("用同一 GPT-5.6 Terra deployment 分析两张照片并生成故事", async () => {
     const bodies: Array<Record<string, unknown>> = [];
+    const interactionLogs: unknown[] = [];
     const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       bodies.push(body);
@@ -44,6 +45,7 @@ describe("Azure Foundry provider", () => {
     const client = new AzureFoundryClient(config, {
       credential,
       fetch: fetch as typeof globalThis.fetch,
+      log: (entry) => interactionLogs.push(entry),
     });
     const differences = await new AzureFoundryDifferenceProvider(client).analyze(
       { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
@@ -83,6 +85,37 @@ describe("Azure Foundry provider", () => {
       "ending",
     ]);
     expect(storyInput.variationId).toBeTruthy();
+    expect(interactionLogs).toHaveLength(4);
+    expect(interactionLogs).toMatchObject([
+      {
+        event: "foundry.request",
+        schemaName: "visible_differences",
+        deployment: "gpt-5.6-terra",
+        messageRoles: ["system", "user"],
+        imageMimeTypes: ["image/webp", "image/jpeg"],
+      },
+      {
+        event: "foundry.response",
+        schemaName: "visible_differences",
+        outcome: "success",
+        httpStatus: 200,
+      },
+      {
+        event: "foundry.request",
+        schemaName: "fiction_story",
+        imageMimeTypes: [],
+      },
+      {
+        event: "foundry.response",
+        schemaName: "fiction_story",
+        outcome: "success",
+        httpStatus: 200,
+      },
+    ]);
+    const serializedLogs = JSON.stringify(interactionLogs);
+    expect(serializedLogs).not.toContain("base64");
+    expect(serializedLogs).not.toContain("发型由短发变为长发");
+    expect(serializedLogs).not.toContain("相册的一页");
   });
 
   it("连续调用时即使随机值相同也排除最近使用的创意坐标", async () => {
