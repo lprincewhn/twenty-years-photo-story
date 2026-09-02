@@ -58,7 +58,9 @@ export class MockStoryProvider implements StoryProvider {
   async generate(
     displayName: string,
     differences: VisibleDifference[],
+    _signal?: AbortSignal,
   ): Promise<FictionStory> {
+    void _signal;
     const details = differences.slice(0, 2).map((item) => item.description).join(" ");
     return {
       label: "AI 创作/虚构",

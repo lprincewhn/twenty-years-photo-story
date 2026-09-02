@@ -25,6 +25,9 @@ const environmentSchema = z.object({
   AZURE_FACE_IDENTIFY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.5),
   AZURE_FACE_MAX_CANDIDATES: z.coerce.number().int().min(1).max(100).default(5),
   AZURE_FACE_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(8_000),
+  AZURE_FOUNDRY_ENDPOINT: z.string().url().optional(),
+  AZURE_FOUNDRY_DEPLOYMENT: z.string().min(1).max(128).default("gpt-5.6-terra"),
+  AZURE_FOUNDRY_TIMEOUT_MS: z.coerce.number().int().min(100).max(120_000).default(60_000),
   AZURE_CLIENT_ID: z.string().uuid().optional(),
 }).superRefine((environment, context) => {
   if (environment.PROVIDER_MODE === "real") {
@@ -33,6 +36,9 @@ const environmentSchema = z.object({
     }
     if (!environment.AZURE_FACE_GROUP_ID) {
       context.addIssue({ code: "custom", path: ["AZURE_FACE_GROUP_ID"], message: "real 模式必须配置 AZURE_FACE_GROUP_ID" });
+    }
+    if (!environment.AZURE_FOUNDRY_ENDPOINT) {
+      context.addIssue({ code: "custom", path: ["AZURE_FOUNDRY_ENDPOINT"], message: "real 模式必须配置 AZURE_FOUNDRY_ENDPOINT" });
     }
     if (environment.AZURE_FACE_IDENTIFY_THRESHOLD >= environment.MATCH_THRESHOLD) {
       context.addIssue({
@@ -57,6 +63,13 @@ export interface AzureFaceConfig {
   managedIdentityClientId?: string;
 }
 
+export interface AzureFoundryConfig {
+  endpoint: string;
+  deployment: string;
+  timeoutMs: number;
+  managedIdentityClientId?: string;
+}
+
 export interface AppConfig {
   host: string;
   port: number;
@@ -66,6 +79,7 @@ export interface AppConfig {
   peopleAssetSecret: string;
   grantTtlSeconds: number;
   azureFace?: AzureFaceConfig;
+  azureFoundry?: AzureFoundryConfig;
 }
 
 export function readConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -96,6 +110,12 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
             identifyThreshold: parsed.AZURE_FACE_IDENTIFY_THRESHOLD,
             maxCandidates: parsed.AZURE_FACE_MAX_CANDIDATES,
             timeoutMs: parsed.AZURE_FACE_TIMEOUT_MS,
+            ...(parsed.AZURE_CLIENT_ID ? { managedIdentityClientId: parsed.AZURE_CLIENT_ID } : {}),
+          },
+          azureFoundry: {
+            endpoint: parsed.AZURE_FOUNDRY_ENDPOINT!.replace(/\/+$/, ""),
+            deployment: parsed.AZURE_FOUNDRY_DEPLOYMENT,
+            timeoutMs: parsed.AZURE_FOUNDRY_TIMEOUT_MS,
             ...(parsed.AZURE_CLIENT_ID ? { managedIdentityClientId: parsed.AZURE_CLIENT_ID } : {}),
           },
         }

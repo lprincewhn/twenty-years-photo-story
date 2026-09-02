@@ -364,7 +364,27 @@ export function createApp({ config, providers }: AppDependencies) {
           ) {
             throw new Error("provider 候选不在授权人物库");
           }
-          const rawDifferences = await providers.difference.analyze(photo, person.id);
+          let rawDifferences;
+          if (config.providerMode === "real") {
+            if (person.photoMimeType === "image/svg+xml") {
+              throw new Error("real provider 不支持 SVG 人物照片");
+            }
+            const referencePath = resolve(peopleAssetsDirectory, person.oldPhotoFile);
+            if (!referencePath.startsWith(`${resolve(peopleAssetsDirectory)}${sep}`)) {
+              throw new Error("人物照片路径无效");
+            }
+            const referenceBytes = await readFile(referencePath);
+            try {
+              rawDifferences = await providers.difference.analyze(photo, {
+                bytes: referenceBytes,
+                mimeType: person.photoMimeType,
+              });
+            } finally {
+              referenceBytes.fill(0);
+            }
+          } else {
+            rawDifferences = await providers.difference.analyze(photo);
+          }
           const differences = rawDifferences.filter((item) =>
             allowedDifferenceCategories.includes(item.category),
           );
@@ -375,6 +395,7 @@ export function createApp({ config, providers }: AppDependencies) {
           const generatedStory = await providers.story.generate(
             person.displayName,
             safeDifferences,
+            photo.signal,
           );
           const story = {
             ...generatedStory,

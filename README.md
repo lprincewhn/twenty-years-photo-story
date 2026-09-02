@@ -56,11 +56,11 @@ npm run dev
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `PORT` | `3000` | API 监听端口 |
-| `PROVIDER_MODE` | `mock` | `mock` 可直接演示；`real` 已接 Azure Face，但差异/故事尚需真实适配器 |
+| `PROVIDER_MODE` | `mock` | `mock` 可直接演示；`real` 使用 Azure Face 与 Foundry GPT-5.6 |
 | `MATCH_THRESHOLD` | `0.6` | 服务端匹配阈值，允许 0.50～0.99 |
 | `ALLOWED_ORIGIN` | `http://localhost:5173` | 允许的前端来源 |
 
-Azure Face 只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。`.env.example` 列出了固定 v1.2、模型、60 秒 faceId TTL 和阈值配置。
+Azure Face 与 Microsoft Foundry 只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。`.env.example` 列出了 Face v1.2、GPT-5.6 Terra、60 秒 faceId TTL 和阈值配置。
 
 ## 人物库准备
 

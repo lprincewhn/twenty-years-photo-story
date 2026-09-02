@@ -5,10 +5,10 @@
 接口位于 `apps/server/src/providers/types.ts`：
 
 - `FaceMatchProvider.match(photo)`：返回人脸数量和候选 `personId`/分数，不直接决定身份结论。
-- `DifferenceProvider.analyze(photo, personId)`：只返回发型、服饰、表情、配饰枚举及客观描述。
+- `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰枚举及客观描述。
 - `StoryProvider.generate(displayName, differences)`：返回固定 AI 标签、标题、正文和免责声明。
 
-`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter；差异与故事尚无真实 adapter，会明确失败，避免误把 mock 结果当成真实分析。
+`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Terra deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。
 
 ## Azure Face adapter
 
@@ -20,17 +20,14 @@
 - `InvalidImage` 映射为 `INVALID_IMAGE`，限流/配额映射为 `RATE_LIMITED`；未训练、网络、超时映射为可重试的 `PROVIDER_UNAVAILABLE`；权限、参数、容器漂移及 `innererror.code=UnsupportedFeature` 映射为不可重试的 `PROVIDER_UNAVAILABLE`。
 - Azure 返回无法映射到 `people.json` 的 personId 属于库漂移，必须报错，不能丢弃候选。
 
-## 后续真实适配器清单
+## Microsoft Foundry adapter
 
-1. 在 provider 边界分别实现差异与故事接口，不改变路由。
-2. 只从服务端环境读取 URL、凭据和模型名；禁止导出到 `VITE_*`。
-3. 每个外部请求设置连接/总超时、最大响应大小和取消信号。
-4. 将供应商分数归一化到 0～1，但由 `app.ts` 使用 `MATCH_THRESHOLD` 再次判断。
-5. 供应商无人脸/多人脸映射为对应领域状态；超时和无效响应映射为 `PROVIDER_UNAVAILABLE`，应用限流映射为 `RATE_LIMITED`。
-6. 差异输出先在适配器校验，编排层仍执行四类别允许列表过滤。提示词和后处理共同禁止敏感推断。
-7. 故事适配器强制覆盖 `label` 与 `disclaimer`，不信任供应商自由文本中的标签。
-8. 为适配器添加契约测试：成功、超时、无效 JSON、错误分数、敏感类别、供应商限流和取消。
-9. 在 `createProviders` 中仅返回明确配置的真实 provider；不允许任何部分静默回退 mock。
+- 差异与故事接口共用一个 GPT-5.6 Terra deployment，但保留两个独立 provider 类和 JSON Schema。
+- 使用 `DefaultAzureCredential` 和 `https://cognitiveservices.azure.com/.default`，生产身份需有 `Cognitive Services OpenAI User`；不接受 API key。
+- 差异分析只向模型发送人物库旧照和本次上传照片，提示词禁止推断年龄、种族、健康、宗教、身份和真实经历。响应还会经过严格 schema 与四类别白名单两层校验。
+- 故事只接收展示名和已过滤差异；应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。
+- 默认总超时 60 秒，客户端取消会向下游传播；429 映射为 `RATE_LIMITED`，网络、超时、无效 JSON 和服务错误映射为 `PROVIDER_UNAVAILABLE`。
+- 不记录图片、base64 请求体、人物名、差异或故事内容。请求结束后，上传照片与从私有人物库读取的旧照 Buffer 都会清零。
 
 ## 阈值维护
 
@@ -50,8 +47,8 @@
 
 1. 浏览器得到明确授权后取得 `File`；预览使用对象 URL。
 2. 用户确认后通过 HTTPS 上传单张图。
-3. Multer 在内存创建 Buffer，三个 provider 在同一请求生命周期使用。
-4. 响应构造或出错后，`finally` 调用 `fill(0)`，再由运行时回收。
+3. Multer 在内存创建上传 Buffer；匹配成功后再读取人物库旧照，两张照片仅在本次请求中发送给 Foundry 做可见差异分析。
+4. 差异调用完成后立即清零旧照 Buffer；响应构造或出错后清零上传 Buffer，再由运行时回收。
 5. 浏览器重拍、重置或卸载时撤销对象 URL。
 
 现场上传不配置磁盘、数据库、队列、结果缓存或内容日志。Azure Detect 的临时 faceId TTL 为 60 秒。人物库的 persisted face 属于另行明确授权的持久数据，存于 Azure southeastasia，并由上述删除 + 重训流程管理。若将来需要异步处理现场照片，必须先完成隐私影响评估、明确最短保留期限、加密、自动删除和用户撤回接口，并重新取得授权。
