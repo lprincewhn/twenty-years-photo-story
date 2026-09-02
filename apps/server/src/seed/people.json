@@ -7,7 +7,7 @@
       "mimeType": "image/svg+xml",
       "width": 600,
       "height": 760,
-      "sourceNote": "项目自制几何插画，仅用于流程演示，不构成真实人脸或真实身份资料。",
+      "sourceNote": "项目自制几何插画，不构成真实人脸或真实身份资料。",
       "members": [
         {
           "personId": "demo-xiaoxia",
@@ -25,11 +25,11 @@
   "people": [
     {
       "id": "demo-xiaoxia",
-      "displayName": "示例人物·小夏",
+      "displayName": "插画人物·小夏",
       "photoId": "legacy-demo-xiaoxia",
       "oldPhotoUrl": "/api/people/demo-xiaoxia/photo",
       "authorization": "placeholder",
-      "sourceNote": "项目自制几何插画，仅用于流程演示，不构成真实人脸或真实身份资料。",
+      "sourceNote": "项目自制几何插画，不构成真实人脸或真实身份资料。",
       "azurePersonId": null
     }
   ]
