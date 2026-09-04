@@ -9,7 +9,7 @@
 - `StoryProvider.generate(differences)`：返回固定 AI 标签、标题、正文和免责声明。
 - `NarrationProvider.synthesize(text)`：把故事标题和正文合成为浏览器可播放音频。
 
-`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Terra deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 可独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。
+`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Sol deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 可独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。
 
 ## Azure Face adapter
 
@@ -23,7 +23,7 @@
 
 ## Microsoft Foundry adapter
 
-- 差异与故事接口共用一个 GPT-5.6 Terra deployment，但保留两个独立 provider 类和 JSON Schema。
+- 差异与故事接口共用一个 GPT-5.6 Sol deployment，但保留两个独立 provider 类和 JSON Schema；故事正文最多 500 字。
 - 使用 `DefaultAzureCredential` 和 `https://cognitiveservices.azure.com/.default`，生产身份需有 `Cognitive Services OpenAI User`；不接受 API key。
 - 差异分析只向模型发送人物库旧照和本次上传照片，提示词禁止推断年龄、种族、健康、宗教、身份和真实经历。响应还会经过严格 schema 与四类别白名单两层校验。
 - 故事只接收已过滤差异，不向模型发送人物展示名；正文必须使用第二人称并明确体现二十年跨度。应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。

@@ -47,7 +47,7 @@ describe("Azure Face 配置", () => {
       AZURE_FOUNDRY_ENDPOINT: "https://svhw2-southeastaisa.cognitiveservices.azure.com/",
     }).azureFoundry).toEqual({
       endpoint: "https://svhw2-southeastaisa.cognitiveservices.azure.com",
-      deployment: "gpt-5.6-terra",
+      deployment: "gpt-5.6-sol",
       timeoutMs: 60_000,
     });
   });

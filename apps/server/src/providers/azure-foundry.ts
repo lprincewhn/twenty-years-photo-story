@@ -23,7 +23,7 @@ const differenceSchema = z.object({
 });
 const storySchema = z.object({
   title: z.string().min(1).max(80),
-  content: z.string().min(1).max(1_000),
+  content: z.string().min(1).max(500),
 });
 const completionSchema = z.object({
   choices: z.array(z.object({
@@ -346,7 +346,7 @@ const storyJsonSchema: JsonSchema = {
   required: ["title", "content"],
   properties: {
     title: { type: "string", maxLength: 80 },
-    content: { type: "string", maxLength: 1_000 },
+    content: { type: "string", maxLength: 500 },
   },
 };
 
@@ -430,6 +430,7 @@ export class AzureFoundryStoryProvider implements StoryProvider {
           "根据给定的可见差异创作搞笑、抖梗的的欢乐中文短故事。" +
           "必须始终用第二人称“你”讲述，正文至少出现一次“你”；" +
           "故事必须明确连接二十年前与现在，正文必须包含“二十年”；" +
+          "正文最多500字；" +
           "不得使用展示名，也不得以“他”“她”或“人物”指代故事主人公。" +
           "适当补充导致二十年差异的原因和经历。" +
           "使用用户消息中的本次创意坐标，使标题、开篇句式、叙事结构和结尾意象与坐标一致；" +

@@ -8,7 +8,7 @@ import {
 
 const config: AzureFoundryConfig = {
   endpoint: "https://foundry.example",
-  deployment: "gpt-5.6-terra",
+  deployment: "gpt-5.6-sol",
   timeoutMs: 1_000,
 };
 const credential = {
@@ -24,7 +24,7 @@ function completion(content: unknown, status = 200): Response {
 }
 
 describe("Azure Foundry provider", () => {
-  it("用同一 GPT-5.6 Terra deployment 分析两张照片并生成故事", async () => {
+  it("用同一 GPT-5.6 Sol deployment 分析两张照片并生成故事", async () => {
     const bodies: Array<Record<string, unknown>> = [];
     const interactionLogs: unknown[] = [];
     const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
@@ -64,7 +64,7 @@ describe("Azure Foundry provider", () => {
     expect(story.content).toContain("你");
     expect(story.content).toContain("二十年");
     expect(bodies).toHaveLength(2);
-    expect(bodies.every((body) => body.model === "gpt-5.6-terra")).toBe(true);
+    expect(bodies.every((body) => body.model === "gpt-5.6-sol")).toBe(true);
     expect(bodies.every((body) =>
       (body.response_format as { type: string }).type === "json_schema")).toBe(true);
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
@@ -73,6 +73,7 @@ describe("Azure Foundry provider", () => {
     expect(storyMessages[0]!.content).toContain("使用用户消息中的本次创意坐标");
     expect(storyMessages[0]!.content).toContain("搞笑、抖梗的的欢乐");
     expect(storyMessages[0]!.content).toContain("适当补充导致二十年差异的原因和经历");
+    expect(storyMessages[0]!.content).toContain("正文最多500字");
     expect(storyMessages[0]!.content).not.toContain("不得补充敏感属性");
     expect(storyMessages[0]!.content).toContain("未寄出的明信片");
     const storyInput = JSON.parse(storyMessages[1]!.content) as {
@@ -92,7 +93,7 @@ describe("Azure Foundry provider", () => {
       {
         event: "foundry.request",
         schemaName: "visible_differences",
-        deployment: "gpt-5.6-terra",
+        deployment: "gpt-5.6-sol",
         messageRoles: ["system", "user"],
         imageMimeTypes: ["image/webp", "image/jpeg"],
         promptMessages: [
@@ -214,5 +215,17 @@ describe("Azure Foundry provider", () => {
       await expect(new AzureFoundryStoryProvider(client).generate([]))
         .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
     }
+  });
+
+  it("拒绝超过 500 字的故事正文", async () => {
+    const client = new AzureFoundryClient(config, {
+      credential,
+      fetch: vi.fn(async () => completion({
+        title: "过长故事",
+        content: `你在二十年后${"笑".repeat(500)}`,
+      })) as typeof globalThis.fetch,
+    });
+    await expect(new AzureFoundryStoryProvider(client).generate([]))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
   });
 });

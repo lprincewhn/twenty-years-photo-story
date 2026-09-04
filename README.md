@@ -65,7 +65,7 @@ npm run dev
 | `AZURE_SPEECH_VOICE` | `zh-CN-XiaoxiaoNeural` | 中文神经语音 |
 | `AZURE_SPEECH_STYLE` | `affectionate` | Azure 情感朗读样式 |
 
-Azure Face、Microsoft Foundry 与 Speech 都只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。Speech 可独立启用，调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。`.env.example` 列出了 Face v1.2、GPT-5.6 Terra、Speech、60 秒 faceId TTL 和阈值配置。
+Azure Face、Microsoft Foundry 与 Speech 都只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。Speech 可独立启用，调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。`.env.example` 列出了 Face v1.2、GPT-5.6 Sol、Speech、60 秒 faceId TTL 和阈值配置。
 
 ## 人物库准备
 
