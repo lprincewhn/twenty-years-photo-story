@@ -87,6 +87,23 @@ describe("移动端核心体验", () => {
     expect(authorize).toHaveBeenNthCalledWith(2, "123456");
   });
 
+  it("从相册选择照片时不请求打开摄像头", async () => {
+    const user = userEvent.setup();
+    render(<App authorize={vi.fn().mockResolvedValue(undefined)} />);
+
+    await user.click(screen.getByRole("checkbox"));
+    await user.type(screen.getByLabelText("启动验证码"), "123456");
+    await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
+
+    const galleryInput = screen.getByLabelText("从相册选择照片");
+    expect(galleryInput).toHaveAttribute("type", "file");
+    expect(galleryInput).toHaveAttribute(
+      "accept",
+      "image/jpeg,image/png,image/webp",
+    );
+    expect(galleryInput).not.toHaveAttribute("capture");
+  });
+
   it("完成选择、预览、确认、可信结果和重新体验", async () => {
     const user = userEvent.setup();
     const analyze = vi.fn().mockResolvedValue(successResult);
