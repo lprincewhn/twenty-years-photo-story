@@ -18,6 +18,7 @@
 - 启动依次读取 group 与 training 状态，校验模型和 `succeeded`。RBAC 传播期的 401/`PermissionDenied` 重试 5 次、间隔 6 秒；其他配置或 Limited Access 错误立即失败。
 - Detect 与 Identify 分别有 8 秒默认超时。Detect 显式使用 `faceIdTimeToLive=60`；不记录 faceId、Azure personId、候选或图片内容。
 - Identify 每次最多 10 个 faceId，Azure `confidenceThreshold` 默认 0.5，仅作粗筛；业务结论只由 `app.ts` 的阈值作出。
+- 应用层验证全部候选分数后，从严格高于 `MATCH_THRESHOLD` 的候选中均匀随机选择；没有候选超过阈值时不返回人物结论。
 - `InvalidImage` 映射为 `INVALID_IMAGE`，限流/配额映射为 `RATE_LIMITED`；未训练、网络、超时映射为可重试的 `PROVIDER_UNAVAILABLE`；权限、参数、容器漂移及 `innererror.code=UnsupportedFeature` 映射为不可重试的 `PROVIDER_UNAVAILABLE`。
 - Azure 返回无法映射到 `people.json` 的 personId 属于库漂移，必须报错，不能丢弃候选。
 

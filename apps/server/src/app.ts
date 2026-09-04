@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { extname, resolve, sep } from "node:path";
@@ -28,6 +28,7 @@ import {
 import {
   allowedDifferenceCategories,
   type DemoCase,
+  type MatchCandidate,
   type PhotoInput,
   type ProviderSet,
 } from "./providers/types.js";
@@ -59,6 +60,27 @@ interface PhotoGrant {
   personId: string;
   exp: number;
   requestId: string;
+}
+
+export function selectRandomEligibleCandidate(
+  candidates: MatchCandidate[],
+  threshold: number,
+  randomIndex: (maxExclusive: number) => number = randomInt,
+): { candidate: MatchCandidate | undefined; highestScore: number } {
+  let highestScore = 0;
+  for (const candidate of candidates) {
+    if (!Number.isFinite(candidate.score) || candidate.score < 0 || candidate.score > 1) {
+      throw new Error("provider 返回了无效分数");
+    }
+    highestScore = Math.max(highestScore, candidate.score);
+  }
+  const eligibleCandidates = candidates.filter((candidate) => candidate.score > threshold);
+  return {
+    candidate: eligibleCandidates.length > 0
+      ? eligibleCandidates[randomIndex(eligibleCandidates.length)]
+      : undefined,
+    highestScore,
+  };
 }
 
 function signGrant(payload: PhotoGrant, secret: string): string {
@@ -460,21 +482,21 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
             throw faceCountError(faceOutput.faceCount);
           }
 
-          const candidate = [...faceOutput.candidates].sort((a, b) => b.score - a.score)[0];
-          const score = candidate?.score ?? 0;
-          if (!Number.isFinite(score) || score < 0 || score > 1) {
-            throw new Error("provider 返回了无效分数");
-          }
-          if (!candidate || score < config.matchThreshold) {
+          const { candidate, highestScore } = selectRandomEligibleCandidate(
+            faceOutput.candidates,
+            config.matchThreshold,
+          );
+          if (!candidate) {
             throw new AppError(
               422,
               "MATCH_BELOW_THRESHOLD",
               "未找到足够可信的匹配",
               "本次分数低于阈值，因此不会给出人物结论。可以换一张更清晰的正面照片重试。",
               true,
-              { score, threshold: config.matchThreshold },
+              { score: highestScore, threshold: config.matchThreshold },
             );
           }
+          const score = candidate.score;
 
           const person = people.find((entry) => entry.id === candidate.personId);
           if (

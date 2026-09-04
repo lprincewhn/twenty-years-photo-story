@@ -36,7 +36,7 @@ curl -X POST http://localhost:3000/api/experience \
   -F photo=@./已获授权的测试图片.jpg
 ```
 
-成功响应包含请求标识、保留说明、匹配分数与阈值、人物示例、允许类别差异、带固定标签的虚构故事，以及 `narration` 中的音频 MIME、Base64 音频和 provider 标识。配置 Azure Speech 时音频为 MP3 情感朗读；未配置密钥的 mock 模式返回短 WAV 占位音频。现场照片本身不会出现在响应中。匹配成功时，服务端还会签发 5 分钟有效、绑定匹配人物的 `HttpOnly; Secure; SameSite=Strict` 授权 Cookie；前端无需读取该 Cookie。
+成功响应包含请求标识、保留说明、随机选中的达标候选之匹配分数与阈值、人物示例、允许类别差异、带固定标签的虚构故事，以及 `narration` 中的音频 MIME、Base64 音频和 provider 标识。应用从严格高于业务阈值的候选中均匀随机选择；配置 Azure Speech 时音频为 MP3 情感朗读，未配置密钥的 mock 模式返回短 WAV 占位音频。现场照片本身不会出现在响应中。匹配成功时，服务端还会签发 5 分钟有效、绑定匹配人物的 `HttpOnly; Secure; SameSite=Strict` 授权 Cookie；前端无需读取该 Cookie。
 
 ## 读取匹配人物照片
 
