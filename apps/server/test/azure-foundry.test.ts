@@ -8,7 +8,7 @@ import {
 
 const config: AzureFoundryConfig = {
   endpoint: "https://foundry.example",
-  deployment: "gpt-5.6-terra",
+  deployment: "gpt-5.6-sol",
   timeoutMs: 1_000,
 };
 const credential = {
@@ -24,7 +24,7 @@ function completion(content: unknown, status = 200): Response {
 }
 
 describe("Azure Foundry provider", () => {
-  it("用同一 GPT-5.6 Terra deployment 分析两张照片并生成故事", async () => {
+  it("用同一 GPT-5.6 Sol deployment 分析两张照片并生成故事", async () => {
     const bodies: Array<Record<string, unknown>> = [];
     const interactionLogs: unknown[] = [];
     const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
@@ -64,14 +64,17 @@ describe("Azure Foundry provider", () => {
     expect(story.content).toContain("你");
     expect(story.content).toContain("二十年");
     expect(bodies).toHaveLength(2);
-    expect(bodies.every((body) => body.model === "gpt-5.6-terra")).toBe(true);
+    expect(bodies.every((body) => body.model === "gpt-5.6-sol")).toBe(true);
     expect(bodies.every((body) =>
       (body.response_format as { type: string }).type === "json_schema")).toBe(true);
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
     const storyMessages = bodies[1]!.messages as Array<{ role: string; content: string }>;
-    expect(storyMessages[0]!.content).toContain("严格执行用户消息中的本次创意坐标");
-    expect(storyMessages[0]!.content).toContain("轻松、搞笑、抖梗");
+    expect(storyMessages[0]!.content).toContain("使用用户消息中的本次创意坐标");
+    expect(storyMessages[0]!.content).toContain("搞笑、抖梗的的欢乐");
+    expect(storyMessages[0]!.content).toContain("适当补充导致二十年差异的原因和经历");
+    expect(storyMessages[0]!.content).toContain("正文最多500字");
+    expect(storyMessages[0]!.content).not.toContain("不得补充敏感属性");
     expect(storyMessages[0]!.content).toContain("未寄出的明信片");
     const storyInput = JSON.parse(storyMessages[1]!.content) as {
       creativeDirection: Record<string, string>;
@@ -90,9 +93,20 @@ describe("Azure Foundry provider", () => {
       {
         event: "foundry.request",
         schemaName: "visible_differences",
-        deployment: "gpt-5.6-terra",
+        deployment: "gpt-5.6-sol",
         messageRoles: ["system", "user"],
         imageMimeTypes: ["image/webp", "image/jpeg"],
+        promptMessages: [
+          { role: "system" },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "第一张是人物库旧照，第二张是用户当前照片。请输出可见差异。" },
+              { type: "image_url", image_url: { url: "[图片已脱敏：image/webp]" } },
+              { type: "image_url", image_url: { url: "[图片已脱敏：image/jpeg]" } },
+            ],
+          },
+        ],
       },
       {
         event: "foundry.response",
@@ -104,6 +118,17 @@ describe("Azure Foundry provider", () => {
         event: "foundry.request",
         schemaName: "fiction_story",
         imageMimeTypes: [],
+        promptMessages: [
+          { role: "system" },
+          {
+            role: "user",
+            content: {
+              differences: "[已脱敏：1 条可见差异]",
+              creativeDirection: storyInput.creativeDirection,
+              variationId: storyInput.variationId,
+            },
+          },
+        ],
       },
       {
         event: "foundry.response",
@@ -116,6 +141,7 @@ describe("Azure Foundry provider", () => {
     expect(serializedLogs).not.toContain("base64");
     expect(serializedLogs).not.toContain("发型由短发变为长发");
     expect(serializedLogs).not.toContain("相册的一页");
+    expect(serializedLogs).toContain("搞笑、抖梗的的欢乐");
   });
 
   it("连续调用时即使随机值相同也排除最近使用的创意坐标", async () => {
@@ -130,6 +156,73 @@ describe("Azure Foundry provider", () => {
         return completion({
           title: "灯光下的重逢",
           content: "你听见一声轻响，二十年的光阴在这个虚构瞬间里轻轻交汇。",
+        });
+
+        it("创意坐标提供 15 种不同风格的核心场景", async () => {
+          const settings: string[] = [];
+          const client = new AzureFoundryClient(config, {
+            credential,
+            fetch: vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+              const request = JSON.parse(String(init?.body)) as {
+                messages: Array<{ content: string }>;
+              };
+              const input = JSON.parse(request.messages[1]!.content) as {
+                creativeDirection: { setting: string };
+              };
+              settings.push(input.creativeDirection.setting);
+              return completion({
+                title: "场景故事",
+                content: "你在二十年后的这个虚构场景里笑着向前。",
+              });
+            }) as typeof globalThis.fetch,
+          });
+          let settingIndex = 0;
+          const provider = new AzureFoundryStoryProvider(client, {
+            randomIndex: () => settingIndex++ * 25,
+            variationId: () => "variation",
+          });
+
+          for (let index = 0; index < 15; index += 1) {
+            await provider.generate([]);
+          }
+
+          expect(new Set(settings).size).toBe(15);
+          expect(settings).toEqual([
+            "清晨车站",
+            "雨后书店",
+            "傍晚厨房",
+            "夏夜阳台",
+            "冬日公园",
+            "安静照相馆",
+            "午夜便利店",
+            "海边渡轮",
+            "山间露营地",
+            "城市天台球场",
+            "老街面馆",
+            "美术馆展厅",
+            "音乐节后台",
+            "长途列车餐车",
+            "太空观景舱",
+          ]);
+        });
+
+        it("接受眼神类别并允许最多 5 条差异", async () => {
+          const differences = [
+            { category: "hairstyle", description: "发型不同。" },
+            { category: "clothing", description: "服饰不同。" },
+            { category: "expression", description: "表情不同。" },
+            { category: "accessory", description: "配饰不同。" },
+            { category: "gaze", description: "注视方向不同。" },
+          ];
+          const client = new AzureFoundryClient(config, {
+            credential,
+            fetch: vi.fn(async () => completion({ differences })) as typeof globalThis.fetch,
+          });
+
+          await expect(new AzureFoundryDifferenceProvider(client).analyze(
+            { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
+            { bytes: Buffer.from("old"), mimeType: "image/jpeg" },
+          )).resolves.toEqual(differences);
         });
       }) as typeof globalThis.fetch,
     });
@@ -189,5 +282,17 @@ describe("Azure Foundry provider", () => {
       await expect(new AzureFoundryStoryProvider(client).generate([]))
         .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
     }
+  });
+
+  it("拒绝超过 500 字的故事正文", async () => {
+    const client = new AzureFoundryClient(config, {
+      credential,
+      fetch: vi.fn(async () => completion({
+        title: "过长故事",
+        content: `你在二十年后${"笑".repeat(500)}`,
+      })) as typeof globalThis.fetch,
+    });
+    await expect(new AzureFoundryStoryProvider(client).generate([]))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
   });
 });

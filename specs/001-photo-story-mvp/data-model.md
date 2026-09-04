@@ -58,7 +58,7 @@
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `category` | 枚举 | `hairstyle`、`clothing`、`expression`、`accessory` | 服务端允许列表 |
+| `category` | 枚举 | `hairstyle`、`clothing`、`expression`、`accessory`、`gaze` | 服务端允许列表 |
 | `description` | 字符串 | 中文、客观、不含敏感推断 | 可见变化描述 |
 
 ## 虚构故事 `FictionStory`

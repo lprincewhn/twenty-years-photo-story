@@ -5,11 +5,11 @@
 接口位于 `apps/server/src/providers/types.ts`：
 
 - `FaceMatchProvider.match(photo)`：返回人脸数量和候选 `personId`/分数，不直接决定身份结论。
-- `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰枚举及客观描述。
+- `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰、眼神枚举及客观描述。
 - `StoryProvider.generate(differences)`：返回固定 AI 标签、标题、正文和免责声明。
 - `NarrationProvider.synthesize(text)`：把故事标题和正文合成为浏览器可播放音频。
 
-`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Terra deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 可独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。
+`apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Sol deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 可独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。
 
 ## Azure Face adapter
 
@@ -18,18 +18,19 @@
 - 启动依次读取 group 与 training 状态，校验模型和 `succeeded`。RBAC 传播期的 401/`PermissionDenied` 重试 5 次、间隔 6 秒；其他配置或 Limited Access 错误立即失败。
 - Detect 与 Identify 分别有 8 秒默认超时。Detect 显式使用 `faceIdTimeToLive=60`；不记录 faceId、Azure personId、候选或图片内容。
 - Identify 每次最多 10 个 faceId，Azure `confidenceThreshold` 默认 0.5，仅作粗筛；业务结论只由 `app.ts` 的阈值作出。
+- 应用层验证全部候选分数后，从严格高于 `MATCH_THRESHOLD` 的候选中均匀随机选择；没有候选超过阈值时不返回人物结论。
 - `InvalidImage` 映射为 `INVALID_IMAGE`，限流/配额映射为 `RATE_LIMITED`；未训练、网络、超时映射为可重试的 `PROVIDER_UNAVAILABLE`；权限、参数、容器漂移及 `innererror.code=UnsupportedFeature` 映射为不可重试的 `PROVIDER_UNAVAILABLE`。
 - Azure 返回无法映射到 `people.json` 的 personId 属于库漂移，必须报错，不能丢弃候选。
 
 ## Microsoft Foundry adapter
 
-- 差异与故事接口共用一个 GPT-5.6 Terra deployment，但保留两个独立 provider 类和 JSON Schema。
+- 差异与故事接口共用一个 GPT-5.6 Sol deployment，但保留两个独立 provider 类和 JSON Schema；故事正文最多 500 字。
 - 使用 `DefaultAzureCredential` 和 `https://cognitiveservices.azure.com/.default`，生产身份需有 `Cognitive Services OpenAI User`；不接受 API key。
 - 差异分析只向模型发送人物库旧照和本次上传照片，提示词禁止推断年龄、种族、健康、宗教、身份和真实经历。响应还会经过严格 schema 与四类别白名单两层校验。
 - 故事只接收已过滤差异，不向模型发送人物展示名；正文必须使用第二人称并明确体现二十年跨度。应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。
 - 默认总超时 60 秒，客户端取消会向下游传播；429 映射为 `RATE_LIMITED`，网络、超时、无效 JSON 和服务错误映射为 `PROVIDER_UNAVAILABLE`。
-- 每次 Foundry 调用输出结构化的 `foundry.request` / `foundry.response` 生命周期日志，包含随机交互标识、schema、deployment、消息角色、图片 MIME、HTTP 状态、耗时、响应字节数和错误码。
-- 不记录提示词正文、图片、base64 请求体、人物名、差异或故事内容。请求结束后，上传照片与从私有人物库读取的旧照 Buffer 都会清零。
+- 每次 Foundry 调用输出结构化的 `foundry.request` / `foundry.response` 生命周期日志，包含随机交互标识、schema、deployment、脱敏后的提示词、消息角色、图片 MIME、HTTP 状态、耗时、响应字节数和错误码。
+- 提示词日志保留静态指令和非敏感创意坐标；图片替换为 MIME 脱敏标记，故事输入中的可见差异仅保留条数。不得记录图片、base64 请求体、人物名、差异正文或故事内容。请求结束后，上传照片与从私有人物库读取的旧照 Buffer 都会清零。
 
 ## 阈值维护
 

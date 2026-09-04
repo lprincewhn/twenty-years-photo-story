@@ -30,7 +30,7 @@ const environmentSchema = z.object({
   AZURE_FACE_MAX_CANDIDATES: z.coerce.number().int().min(1).max(100).default(5),
   AZURE_FACE_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(8_000),
   AZURE_FOUNDRY_ENDPOINT: z.string().url().optional(),
-  AZURE_FOUNDRY_DEPLOYMENT: z.string().min(1).max(128).default("gpt-5.6-terra"),
+  AZURE_FOUNDRY_DEPLOYMENT: z.string().min(1).max(128).default("gpt-5.6-sol"),
   AZURE_FOUNDRY_TIMEOUT_MS: z.coerce.number().int().min(100).max(120_000).default(60_000),
   AZURE_CLIENT_ID: z.string().uuid().optional(),
 }).superRefine((environment, context) => {

@@ -33,6 +33,7 @@ describe("mock provider", () => {
       "clothing",
       "expression",
       "accessory",
+      "gaze",
     ]);
     expect(story.label).toBe("AI 创作/虚构");
     expect(story.content).toContain("二十年");

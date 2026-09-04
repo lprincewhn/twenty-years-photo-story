@@ -17,7 +17,7 @@ SVHW-16 的可运行移动端 H5 MVP：用户明确授权后拍摄或选择当�
 - 可替换的人脸匹配、可见差异分析、故事生成三个 provider 接口
 - Azure Speech 情感语音合成，结果生成后自动朗读并保留播放控件
 - 默认阈值 0.6，并展示分数、阈值与置信级别
-- 只允许发型、服饰、表情、配饰四类客观可见差异
+- 只允许发型、服饰、表情、配饰、眼神五类客观可见差异
 - 成功、相机拒绝、无效图片、无人脸、多人脸、未匹配、网络和 provider 失败中文状态
 - 移动端优先的键盘焦点、状态播报、触控尺寸、对比度与减少动画支持
 
@@ -65,7 +65,7 @@ npm run dev
 | `AZURE_SPEECH_VOICE` | `zh-CN-XiaoxiaoNeural` | 中文神经语音 |
 | `AZURE_SPEECH_STYLE` | `affectionate` | Azure 情感朗读样式 |
 
-Azure Face、Microsoft Foundry 与 Speech 都只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。Speech 可独立启用，调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。`.env.example` 列出了 Face v1.2、GPT-5.6 Terra、Speech、60 秒 faceId TTL 和阈值配置。
+Azure Face、Microsoft Foundry 与 Speech 都只使用 `DefaultAzureCredential`/Managed Identity，不支持 API key；相关配置不能带 `VITE_` 前缀或写入前端。Speech 可独立启用，调用身份必须在目标资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor` 角色。`.env.example` 列出了 Face v1.2、GPT-5.6 Sol、Speech、60 秒 faceId TTL 和阈值配置。
 
 ## 人物库准备
 

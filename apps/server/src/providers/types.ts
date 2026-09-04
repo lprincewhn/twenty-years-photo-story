@@ -3,6 +3,7 @@ export const allowedDifferenceCategories = [
   "clothing",
   "expression",
   "accessory",
+  "gaze",
 ] as const;
 
 export type DifferenceCategory = (typeof allowedDifferenceCategories)[number];

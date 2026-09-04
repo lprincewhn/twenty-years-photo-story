@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "../src/app.js";
+import { createApp, selectRandomEligibleCandidate } from "../src/app.js";
 import type { AppConfig } from "../src/config.js";
 import { parsePeople } from "../src/people.js";
 import { createMockProviders } from "../src/providers/mock.js";
@@ -224,7 +224,7 @@ describe("照片故事 API", () => {
       threshold: 0.82,
       confidence: "high",
     });
-    expect(response.body.differences).toHaveLength(4);
+    expect(response.body.differences).toHaveLength(5);
     expect(response.body.story.label).toBe("AI 创作/虚构");
     expect(response.body.narration).toMatchObject({
       mimeType: "audio/wav",
@@ -311,7 +311,7 @@ describe("照片故事 API", () => {
       .expect(404);
   });
 
-  it("分数等于阈值时可以匹配", async () => {
+  it("分数等于阈值时不参与随机匹配", async () => {
     const providers = createMockProviders();
     providers.faceMatch = {
       match: async () => ({
@@ -319,9 +319,28 @@ describe("照片故事 API", () => {
         candidates: [{ personId: "demo-xiaoxia", score: 0.82 }],
       }),
     };
-    const response = await validRequest(app(providers)).expect(200);
-    expect(response.body.match.score).toBe(0.82);
-    expect(response.body.match.confidence).toBe("medium");
+    const response = await validRequest(app(providers)).expect(422);
+    expect(response.body.error).toMatchObject({
+      code: "MATCH_BELOW_THRESHOLD",
+      details: { score: 0.82, threshold: 0.82 },
+    });
+  });
+
+  it("从所有高于阈值的候选中随机选择", () => {
+    const candidates = [
+      { personId: "first", score: 0.99 },
+      { personId: "below", score: 0.7 },
+      { personId: "second", score: 0.85 },
+    ];
+
+    expect(selectRandomEligibleCandidate(candidates, 0.82, () => 0)).toEqual({
+      candidate: candidates[0],
+      highestScore: 0.99,
+    });
+    expect(selectRandomEligibleCandidate(candidates, 0.82, () => 1)).toEqual({
+      candidate: candidates[2],
+      highestScore: 0.99,
+    });
   });
 
   it("低于阈值不返回候选人物结论", async () => {

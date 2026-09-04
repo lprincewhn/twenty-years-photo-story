@@ -22,6 +22,7 @@ const successResult: ExperienceResult = {
   differences: [
     { category: "hairstyle", description: "发型从短发变为长发。" },
     { category: "accessory", description: "新照中多了一副眼镜。" },
+    { category: "gaze", description: "视线从直视镜头变为微微转向一侧。" },
   ],
   story: {
     label: "AI 创作/虚构",
@@ -98,6 +99,8 @@ describe("移动端核心体验", () => {
     expect(screen.getAllByText(/AI 创作\/虚构/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("匹配分数 94%")).toBeInTheDocument();
     expect(screen.getByText("结论阈值 82%")).toBeInTheDocument();
+    expect(screen.getByText("眼神")).toBeInTheDocument();
+    expect(screen.getByText("视线从直视镜头变为微微转向一侧。")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
     expect(screen.getByLabelText("故事情感朗读")).toHaveAttribute("src", "blob:本地预览");
     expect(screen.getByLabelText("故事情感朗读")).toHaveAttribute("autoplay");

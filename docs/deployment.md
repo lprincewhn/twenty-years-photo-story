@@ -40,7 +40,7 @@ AZURE_SPEECH_VOICE=zh-CN-XiaoxiaoNeural
 AZURE_SPEECH_STYLE=affectionate
 ```
 
-演示环境可使用 mock。real 模式使用 Azure Face 完成人物匹配，并使用 Microsoft Foundry GPT-5.6 Terra 完成可见差异分析与虚构故事生成；任一 provider 配置不完整都会拒绝启动或明确返回 `PROVIDER_UNAVAILABLE`，绝不回落到 mock。
+演示环境可使用 mock。real 模式使用 Azure Face 完成人物匹配，并使用 Microsoft Foundry GPT-5.6 Sol 完成可见差异分析与虚构故事生成；任一 provider 配置不完整都会拒绝启动或明确返回 `PROVIDER_UNAVAILABLE`，绝不回落到 mock。
 
 Azure Speech 可独立接入：`AZURE_SPEECH_ENDPOINT` 与 `AZURE_SPEECH_RESOURCE_ID` 必须同时设置，否则启动配置校验失败；未设置时使用 mock 占位音频。Speech 通过 `DefaultAzureCredential` 获取 `https://cognitiveservices.azure.com/.default` Token，不使用资源 Key。目标身份须在资源上拥有 `Cognitive Services Speech User` 或 `Cognitive Services Speech Contributor`。
 
@@ -61,7 +61,7 @@ AZURE_FACE_IDENTIFY_THRESHOLD=0.5
 AZURE_FACE_MAX_CANDIDATES=5
 AZURE_FACE_TIMEOUT_MS=8000
 AZURE_FOUNDRY_ENDPOINT=https://<ai-services-resource>.cognitiveservices.azure.com
-AZURE_FOUNDRY_DEPLOYMENT=gpt-5.6-terra
+AZURE_FOUNDRY_DEPLOYMENT=gpt-5.6-sol
 AZURE_FOUNDRY_TIMEOUT_MS=60000
 ```
 

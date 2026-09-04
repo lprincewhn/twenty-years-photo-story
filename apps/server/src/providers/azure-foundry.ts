@@ -19,11 +19,11 @@ const differenceSchema = z.object({
   differences: z.array(z.object({
     category: z.enum(allowedDifferenceCategories),
     description: z.string().min(1).max(200),
-  })).max(4),
+  })).max(5),
 });
 const storySchema = z.object({
   title: z.string().min(1).max(80),
-  content: z.string().min(1).max(1_000),
+  content: z.string().min(1).max(500),
 });
 const completionSchema = z.object({
   choices: z.array(z.object({
@@ -52,6 +52,15 @@ const storySettings = [
   "夏夜阳台",
   "冬日公园",
   "安静照相馆",
+  "午夜便利店",
+  "海边渡轮",
+  "山间露营地",
+  "城市天台球场",
+  "老街面馆",
+  "美术馆展厅",
+  "音乐节后台",
+  "长途列车餐车",
+  "太空观景舱",
 ] as const;
 const storyRhythms = [
   "短句轻快",
@@ -115,6 +124,7 @@ export interface AzureFoundryInteractionLog {
   deployment: string;
   messageRoles?: string[];
   imageMimeTypes?: string[];
+  promptMessages?: Array<{ role: string; content: unknown }>;
   outcome?: "success" | "error";
   httpStatus?: number;
   durationMs?: number;
@@ -122,28 +132,61 @@ export interface AzureFoundryInteractionLog {
   errorCode?: string;
 }
 
-function summarizeMessages(messages: unknown[]): {
+function summarizeMessages(messages: unknown[], schemaName: string): {
   messageRoles: string[];
   imageMimeTypes: string[];
+  promptMessages: Array<{ role: string; content: unknown }>;
 } {
   const messageRoles: string[] = [];
   const imageMimeTypes: string[] = [];
+  const promptMessages: Array<{ role: string; content: unknown }> = [];
   for (const message of messages) {
     if (!message || typeof message !== "object") continue;
     const record = message as Record<string, unknown>;
-    if (typeof record.role === "string") messageRoles.push(record.role);
-    if (!Array.isArray(record.content)) continue;
-    for (const item of record.content) {
-      if (!item || typeof item !== "object") continue;
-      const imageUrl = (item as Record<string, unknown>).image_url;
-      if (!imageUrl || typeof imageUrl !== "object") continue;
-      const url = (imageUrl as Record<string, unknown>).url;
-      if (typeof url !== "string") continue;
-      const match = /^data:([^;,]+);base64,/u.exec(url);
-      if (match?.[1]) imageMimeTypes.push(match[1]);
+    if (typeof record.role !== "string") continue;
+    messageRoles.push(record.role);
+    if (typeof record.content === "string") {
+      let content: unknown = record.content;
+      if (schemaName === "fiction_story" && record.role === "user") {
+        try {
+          const payload = JSON.parse(record.content) as Record<string, unknown>;
+          const differenceCount = Array.isArray(payload.differences)
+            ? payload.differences.length
+            : 0;
+          content = {
+            ...payload,
+            differences: `[已脱敏：${differenceCount} 条可见差异]`,
+          };
+        } catch {
+          content = "[无法安全解析的用户提示词已脱敏]";
+        }
+      }
+      promptMessages.push({ role: record.role, content });
+      continue;
     }
+    if (!Array.isArray(record.content)) continue;
+    const content = record.content.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const itemRecord = item as Record<string, unknown>;
+      const imageUrl = itemRecord.image_url;
+      if (!imageUrl || typeof imageUrl !== "object") return item;
+      const imageUrlRecord = imageUrl as Record<string, unknown>;
+      const url = imageUrlRecord.url;
+      if (typeof url !== "string") return item;
+      const match = /^data:([^;,]+);base64,/u.exec(url);
+      if (!match?.[1]) return item;
+      imageMimeTypes.push(match[1]);
+      return {
+        ...itemRecord,
+        image_url: {
+          ...imageUrlRecord,
+          url: `[图片已脱敏：${match[1]}]`,
+        },
+      };
+    });
+    promptMessages.push({ role: record.role, content });
   }
-  return { messageRoles, imageMimeTypes };
+  return { messageRoles, imageMimeTypes, promptMessages };
 }
 
 function providerError(retryable: boolean): AppError {
@@ -184,7 +227,7 @@ export class AzureFoundryClient {
     if (!token) throw providerError(true);
     const interactionId = randomUUID();
     const startedAt = Date.now();
-    const messageSummary = summarizeMessages(messages);
+    const messageSummary = summarizeMessages(messages, schemaName);
     this.log({
       event: "foundry.request",
       interactionId,
@@ -292,7 +335,7 @@ const differenceJsonSchema: JsonSchema = {
   properties: {
     differences: {
       type: "array",
-      maxItems: 4,
+      maxItems: 5,
       items: {
         type: "object",
         additionalProperties: false,
@@ -312,7 +355,7 @@ const storyJsonSchema: JsonSchema = {
   required: ["title", "content"],
   properties: {
     title: { type: "string", maxLength: 80 },
-    content: { type: "string", maxLength: 1_000 },
+    content: { type: "string", maxLength: 500 },
   },
 };
 
@@ -328,7 +371,7 @@ export class AzureFoundryDifferenceProvider implements DifferenceProvider {
       {
         role: "system",
         content:
-          "只比较两张照片中直接可见且客观的发型、服饰、表情、配饰差异。" +
+          "只比较两张照片中直接可见且客观的发型、服饰、表情、配饰、眼神差异。" +
           "不得推断年龄、种族、健康、宗教、情绪状态、身份或真实经历；看不清就省略。",
       },
       {
@@ -393,12 +436,13 @@ export class AzureFoundryStoryProvider implements StoryProvider {
       {
         role: "system",
         content:
-          "根据给定的可见差异创作轻松、搞笑、抖梗的中文短故事。" +
+          "根据给定的可见差异创作搞笑、抖梗的的欢乐中文短故事。" +
           "必须始终用第二人称“你”讲述，正文至少出现一次“你”；" +
           "故事必须明确连接二十年前与现在，正文必须包含“二十年”；" +
+          "正文最多500字；" +
           "不得使用展示名，也不得以“他”“她”或“人物”指代故事主人公。" +
-          "必须明确是虚构，不得补充敏感属性、身份结论或真实经历。" +
-          "严格执行用户消息中的本次创意坐标，使标题、开篇句式、叙事结构和结尾意象与坐标一致；" +
+          "适当补充导致二十年差异的原因和经历。" +
+          "使用用户消息中的本次创意坐标，使标题、开篇句式、叙事结构和结尾意象与坐标一致；" +
           "不得提及创意坐标或创作编号，不要把差异逐条复述成报告。" +
           "避免“翻开旧相册”“时光荏苒”“岁月留下痕迹”“仿佛回到从前”" +
           "“未寄出的明信片”“珍惜每一次笑容”等高频套话。",
