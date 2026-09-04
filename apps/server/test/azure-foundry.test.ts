@@ -70,8 +70,10 @@ describe("Azure Foundry provider", () => {
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
     const storyMessages = bodies[1]!.messages as Array<{ role: string; content: string }>;
-    expect(storyMessages[0]!.content).toContain("严格执行用户消息中的本次创意坐标");
-    expect(storyMessages[0]!.content).toContain("轻松、搞笑、抖梗");
+    expect(storyMessages[0]!.content).toContain("使用用户消息中的本次创意坐标");
+    expect(storyMessages[0]!.content).toContain("搞笑、抖梗的的欢乐");
+    expect(storyMessages[0]!.content).toContain("适当补充导致二十年差异的原因和经历");
+    expect(storyMessages[0]!.content).not.toContain("不得补充敏感属性");
     expect(storyMessages[0]!.content).toContain("未寄出的明信片");
     const storyInput = JSON.parse(storyMessages[1]!.content) as {
       creativeDirection: Record<string, string>;
@@ -138,7 +140,7 @@ describe("Azure Foundry provider", () => {
     expect(serializedLogs).not.toContain("base64");
     expect(serializedLogs).not.toContain("发型由短发变为长发");
     expect(serializedLogs).not.toContain("相册的一页");
-    expect(serializedLogs).toContain("轻松、搞笑、抖梗");
+    expect(serializedLogs).toContain("搞笑、抖梗的的欢乐");
   });
 
   it("连续调用时即使随机值相同也排除最近使用的创意坐标", async () => {
