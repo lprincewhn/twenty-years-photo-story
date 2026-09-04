@@ -5,7 +5,7 @@
 接口位于 `apps/server/src/providers/types.ts`：
 
 - `FaceMatchProvider.match(photo)`：返回人脸数量和候选 `personId`/分数，不直接决定身份结论。
-- `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰枚举及客观描述。
+- `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰、眼神枚举及客观描述。
 - `StoryProvider.generate(differences)`：返回固定 AI 标签、标题、正文和免责声明。
 - `NarrationProvider.synthesize(text)`：把故事标题和正文合成为浏览器可播放音频。
 

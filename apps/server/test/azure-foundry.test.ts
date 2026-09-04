@@ -157,6 +157,73 @@ describe("Azure Foundry provider", () => {
           title: "灯光下的重逢",
           content: "你听见一声轻响，二十年的光阴在这个虚构瞬间里轻轻交汇。",
         });
+
+        it("创意坐标提供 15 种不同风格的核心场景", async () => {
+          const settings: string[] = [];
+          const client = new AzureFoundryClient(config, {
+            credential,
+            fetch: vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+              const request = JSON.parse(String(init?.body)) as {
+                messages: Array<{ content: string }>;
+              };
+              const input = JSON.parse(request.messages[1]!.content) as {
+                creativeDirection: { setting: string };
+              };
+              settings.push(input.creativeDirection.setting);
+              return completion({
+                title: "场景故事",
+                content: "你在二十年后的这个虚构场景里笑着向前。",
+              });
+            }) as typeof globalThis.fetch,
+          });
+          let settingIndex = 0;
+          const provider = new AzureFoundryStoryProvider(client, {
+            randomIndex: () => settingIndex++ * 25,
+            variationId: () => "variation",
+          });
+
+          for (let index = 0; index < 15; index += 1) {
+            await provider.generate([]);
+          }
+
+          expect(new Set(settings).size).toBe(15);
+          expect(settings).toEqual([
+            "清晨车站",
+            "雨后书店",
+            "傍晚厨房",
+            "夏夜阳台",
+            "冬日公园",
+            "安静照相馆",
+            "午夜便利店",
+            "海边渡轮",
+            "山间露营地",
+            "城市天台球场",
+            "老街面馆",
+            "美术馆展厅",
+            "音乐节后台",
+            "长途列车餐车",
+            "太空观景舱",
+          ]);
+        });
+
+        it("接受眼神类别并允许最多 5 条差异", async () => {
+          const differences = [
+            { category: "hairstyle", description: "发型不同。" },
+            { category: "clothing", description: "服饰不同。" },
+            { category: "expression", description: "表情不同。" },
+            { category: "accessory", description: "配饰不同。" },
+            { category: "gaze", description: "注视方向不同。" },
+          ];
+          const client = new AzureFoundryClient(config, {
+            credential,
+            fetch: vi.fn(async () => completion({ differences })) as typeof globalThis.fetch,
+          });
+
+          await expect(new AzureFoundryDifferenceProvider(client).analyze(
+            { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
+            { bytes: Buffer.from("old"), mimeType: "image/jpeg" },
+          )).resolves.toEqual(differences);
+        });
       }) as typeof globalThis.fetch,
     });
     let variationNumber = 0;

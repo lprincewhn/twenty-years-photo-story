@@ -26,6 +26,7 @@ const categoryNames = {
   clothing: "服饰",
   expression: "表情",
   accessory: "配饰",
+  gaze: "眼神",
 };
 
 interface AppProps {
@@ -269,7 +270,7 @@ export function App({
             <ul className="promise-list" id={privacyId}>
               <li><strong>仅用于本次体验：</strong>现场照片在服务端内存中处理，响应后释放。</li>
               <li><strong>默认不留存：</strong>不落盘、不进入人物库、不用于训练。</li>
-              <li><strong>谨慎表达：</strong>只描述发型、服饰、表情、配饰等可见特征。</li>
+              <li><strong>谨慎表达：</strong>只描述发型、服饰、表情、配饰、眼神等可见特征。</li>
               <li><strong>不是身份认证：</strong>匹配仅用于寻找外貌相近的旧照，低于阈值不下结论。</li>
               <li><strong>故事是虚构：</strong>生成内容会显著标记“AI 创作/虚构”。</li>
             </ul>

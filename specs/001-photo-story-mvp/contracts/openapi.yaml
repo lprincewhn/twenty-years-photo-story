@@ -208,7 +208,7 @@ components:
       properties:
         category:
           type: string
-          enum: [hairstyle, clothing, expression, accessory]
+          enum: [hairstyle, clothing, expression, accessory, gaze]
         description:
           type: string
     FictionStory:

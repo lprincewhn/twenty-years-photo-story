@@ -70,7 +70,7 @@ specs/001-photo-story-mvp/
 1. **单端点编排**：MVP 中三个 provider 顺序调用，减少浏览器状态和临时数据存活时间。
 2. **依赖注入**：`createApp` 接受 provider 集合，测试可注入边界和异常行为，未来真实适配器无需改路由。
 3. **双重阈值保护**：provider 返回候选分数，编排层按服务端阈值决定是否返回人物，真实 provider 不能绕过。
-4. **差异过滤**：编排层只保留 `hairstyle`、`clothing`、`expression`、`accessory`，即使 provider 越界也不会下发。
+4. **差异过滤**：编排层只保留 `hairstyle`、`clothing`、`expression`、`accessory`、`gaze`，即使 provider 越界也不会下发。
 5. **错误归一化**：领域错误映射为稳定 HTTP 状态和中文解释；未知 provider 错误统一为可重试 502。
 6. **演示场景**：开发界面可向 mock 发送明确 `demoCase`；真实 provider 模式忽略该字段。
 7. **部署模式**：开发时 Vite 代理 `/api`；生产可分别部署静态站与 Node 服务，或由反向代理统一域名。

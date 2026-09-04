@@ -51,6 +51,7 @@ export class MockDifferenceProvider implements DifferenceProvider {
       { category: "clothing", description: "旧照是浅色校服风上衣，新照是蓝色外套。" },
       { category: "expression", description: "两张照片里都能看到放松的微笑。" },
       { category: "accessory", description: "新照中多了一副圆框眼镜。" },
+      { category: "gaze", description: "旧照直视镜头，新照的视线微微转向一侧。" },
     ];
   }
 }

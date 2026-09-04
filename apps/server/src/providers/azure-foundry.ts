@@ -19,7 +19,7 @@ const differenceSchema = z.object({
   differences: z.array(z.object({
     category: z.enum(allowedDifferenceCategories),
     description: z.string().min(1).max(200),
-  })).max(4),
+  })).max(5),
 });
 const storySchema = z.object({
   title: z.string().min(1).max(80),
@@ -52,6 +52,15 @@ const storySettings = [
   "夏夜阳台",
   "冬日公园",
   "安静照相馆",
+  "午夜便利店",
+  "海边渡轮",
+  "山间露营地",
+  "城市天台球场",
+  "老街面馆",
+  "美术馆展厅",
+  "音乐节后台",
+  "长途列车餐车",
+  "太空观景舱",
 ] as const;
 const storyRhythms = [
   "短句轻快",
@@ -326,7 +335,7 @@ const differenceJsonSchema: JsonSchema = {
   properties: {
     differences: {
       type: "array",
-      maxItems: 4,
+      maxItems: 5,
       items: {
         type: "object",
         additionalProperties: false,
@@ -362,7 +371,7 @@ export class AzureFoundryDifferenceProvider implements DifferenceProvider {
       {
         role: "system",
         content:
-          "只比较两张照片中直接可见且客观的发型、服饰、表情、配饰差异。" +
+          "只比较两张照片中直接可见且客观的发型、服饰、表情、配饰、眼神差异。" +
           "不得推断年龄、种族、健康、宗教、情绪状态、身份或真实经历；看不清就省略。",
       },
       {

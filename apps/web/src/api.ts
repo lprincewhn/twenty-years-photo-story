@@ -6,7 +6,7 @@ export type DemoCase =
   | "provider-error";
 
 export interface VisibleDifference {
-  category: "hairstyle" | "clothing" | "expression" | "accessory";
+  category: "hairstyle" | "clothing" | "expression" | "accessory" | "gaze";
   description: string;
 }
 
