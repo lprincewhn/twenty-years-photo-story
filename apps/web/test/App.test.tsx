@@ -113,6 +113,7 @@ describe("移动端核心体验", () => {
       width: "30%",
       height: "40%",
     });
+    expect(screen.getByLabelText("匹配人物位置")).toBeEmptyDOMElement();
     expect(screen.getByText("这是一则跨越二十年的温暖虚构故事。")).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");
 
