@@ -418,9 +418,7 @@ export function App({
                         width: `${result.match.person.faceBox.width * 100}%`,
                         height: `${result.match.person.faceBox.height * 100}%`,
                       }}
-                    >
-                      <span>你</span>
-                    </span>
+                    />
                   )}
                 </div>
                 <figcaption>二十年前 · 已框选匹配人物</figcaption>
