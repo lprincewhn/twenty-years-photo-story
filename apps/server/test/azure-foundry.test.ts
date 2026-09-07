@@ -14,6 +14,18 @@ const config: AzureFoundryConfig = {
 const credential = {
   getToken: vi.fn(async () => ({ token: "token", expiresOnTimestamp: Date.now() + 60_000 })),
 };
+const referencePhoto = { bytes: Buffer.from("old"), mimeType: "image/webp" as const };
+
+interface StoryInput {
+  differences: unknown[];
+  creativeDirection: Record<string, string>;
+  variationId: string;
+}
+
+function readStoryInput(body: Record<string, unknown>): StoryInput {
+  const messages = body.messages as Array<{ content: Array<{ text: string }> }>;
+  return JSON.parse(messages[1]!.content[0]!.text) as StoryInput;
+}
 
 function completion(content: unknown, status = 200): Response {
   return new Response(JSON.stringify(
@@ -49,9 +61,12 @@ describe("Azure Foundry provider", () => {
     });
     const differences = await new AzureFoundryDifferenceProvider(client).analyze(
       { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
-      { bytes: Buffer.from("old"), mimeType: "image/webp" },
+      referencePhoto,
     );
-    const story = await new AzureFoundryStoryProvider(client).generate(differences);
+    const signal = new AbortController().signal;
+    const story = await new AzureFoundryStoryProvider(client).generate(
+      differences, signal, referencePhoto,
+    );
 
     expect(differences).toEqual([{
       category: "hairstyle",
@@ -69,21 +84,30 @@ describe("Azure Foundry provider", () => {
       (body.response_format as { type: string }).type === "json_schema")).toBe(true);
     expect(JSON.stringify(bodies[0])).toContain("data:image/webp;base64,");
     expect(JSON.stringify(bodies[0])).toContain("data:image/jpeg;base64,");
-    const storyMessages = bodies[1]!.messages as Array<{ role: string; content: string }>;
-    expect(storyMessages[0]!.content).toContain("使用用户消息中的本次创意坐标");
-    expect(storyMessages[0]!.content).toContain("搞笑、抖梗的的欢乐");
-    expect(storyMessages[0]!.content).toContain("适当补充导致二十年差异的原因和经历");
-    expect(storyMessages[0]!.content).toContain("正文最多500字");
-    expect(storyMessages[0]!.content).not.toContain("不得补充敏感属性");
-    expect(storyMessages[0]!.content).toContain("未寄出的明信片");
-    const storyInput = JSON.parse(storyMessages[1]!.content) as {
-      creativeDirection: Record<string, string>;
-      variationId: string;
-    };
+    const storyMessages = bodies[1]!.messages as [
+      { role: string; content: string },
+      { role: string; content: unknown[] },
+    ];
+    expect(storyMessages[0].content).toContain("使用用户消息中的本次创意坐标");
+    expect(storyMessages[0].content).toContain("搞笑、抖梗的的欢乐");
+    expect(storyMessages[0].content).toContain("适当补充导致二十年差异的原因和经历");
+    expect(storyMessages[0].content).toContain("正文最多500字");
+    expect(storyMessages[0].content).toContain("未寄出的明信片");
+    expect(storyMessages[0].content).toContain("先识别旧照中直接可见的环境、物件与场景");
+    expect(storyMessages[0].content).toContain("不得猜测具体场景");
+    expect(storyMessages[1].content).toEqual([
+      { type: "text", text: expect.any(String) },
+      {
+        type: "image_url",
+        image_url: { url: "data:image/webp;base64,b2xk", detail: "high" },
+      },
+    ]);
+    expect(JSON.stringify(bodies[1])).not.toContain(Buffer.from("new").toString("base64"));
+    const storyInput = readStoryInput(bodies[1]!);
+    expect(storyInput.differences).toEqual(differences);
     expect(Object.keys(storyInput.creativeDirection)).toEqual([
       "perspective",
       "structure",
-      "setting",
       "rhythm",
       "ending",
     ]);
@@ -117,16 +141,22 @@ describe("Azure Foundry provider", () => {
       {
         event: "foundry.request",
         schemaName: "fiction_story",
-        imageMimeTypes: [],
+        imageMimeTypes: ["image/webp"],
         promptMessages: [
           { role: "system" },
           {
             role: "user",
-            content: {
-              differences: "[已脱敏：1 条可见差异]",
-              creativeDirection: storyInput.creativeDirection,
-              variationId: storyInput.variationId,
-            },
+            content: [
+              {
+                type: "text",
+                text: {
+                  differences: "[已脱敏：1 条可见差异]",
+                  creativeDirection: storyInput.creativeDirection,
+                  variationId: storyInput.variationId,
+                },
+              },
+              { type: "image_url", image_url: { url: "[图片已脱敏：image/webp]" } },
+            ],
           },
         ],
       },
@@ -149,80 +179,11 @@ describe("Azure Foundry provider", () => {
     const client = new AzureFoundryClient(config, {
       credential,
       fetch: vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-        const request = JSON.parse(String(init?.body)) as {
-          messages: Array<{ content: string }>;
-        };
-        inputs.push(JSON.parse(request.messages[1]!.content) as Record<string, unknown>);
+        const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        inputs.push({ ...readStoryInput(request) });
         return completion({
           title: "灯光下的重逢",
           content: "你听见一声轻响，二十年的光阴在这个虚构瞬间里轻轻交汇。",
-        });
-
-        it("创意坐标提供 15 种不同风格的核心场景", async () => {
-          const settings: string[] = [];
-          const client = new AzureFoundryClient(config, {
-            credential,
-            fetch: vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-              const request = JSON.parse(String(init?.body)) as {
-                messages: Array<{ content: string }>;
-              };
-              const input = JSON.parse(request.messages[1]!.content) as {
-                creativeDirection: { setting: string };
-              };
-              settings.push(input.creativeDirection.setting);
-              return completion({
-                title: "场景故事",
-                content: "你在二十年后的这个虚构场景里笑着向前。",
-              });
-            }) as typeof globalThis.fetch,
-          });
-          let settingIndex = 0;
-          const provider = new AzureFoundryStoryProvider(client, {
-            randomIndex: () => settingIndex++ * 25,
-            variationId: () => "variation",
-          });
-
-          for (let index = 0; index < 15; index += 1) {
-            await provider.generate([]);
-          }
-
-          expect(new Set(settings).size).toBe(15);
-          expect(settings).toEqual([
-            "清晨车站",
-            "雨后书店",
-            "傍晚厨房",
-            "夏夜阳台",
-            "冬日公园",
-            "安静照相馆",
-            "午夜便利店",
-            "海边渡轮",
-            "山间露营地",
-            "城市天台球场",
-            "老街面馆",
-            "美术馆展厅",
-            "音乐节后台",
-            "长途列车餐车",
-            "太空观景舱",
-          ]);
-        });
-
-        it("接受眼神类别并允许最多 5 条差异", async () => {
-          const differences = [
-            { category: "hairstyle", description: "发型不同。" },
-            { category: "clothing", description: "服饰不同。" },
-            { category: "expression", description: "表情不同。" },
-            { category: "accessory", description: "配饰不同。" },
-            { category: "gaze", description: "注视方向不同。" },
-          ];
-          const client = new AzureFoundryClient(config, {
-            credential,
-            fetch: vi.fn(async () => completion({ differences })) as typeof globalThis.fetch,
-          });
-
-          await expect(new AzureFoundryDifferenceProvider(client).analyze(
-            { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
-            { bytes: Buffer.from("old"), mimeType: "image/jpeg" },
-          )).resolves.toEqual(differences);
         });
       }) as typeof globalThis.fetch,
     });
@@ -232,14 +193,40 @@ describe("Azure Foundry provider", () => {
       variationId: () => `variation-${variationNumber += 1}`,
     });
 
-    await provider.generate([]);
-    await provider.generate([]);
+    await provider.generate([], undefined, referencePhoto);
+    await provider.generate([], undefined, referencePhoto);
 
     expect(inputs[0]!.creativeDirection).not.toEqual(inputs[1]!.creativeDirection);
     expect(inputs.map((input) => input.variationId)).toEqual([
       "variation-1",
       "variation-2",
     ]);
+  });
+
+  it("接受眼神类别并允许最多 5 条差异", async () => {
+    const differences = [
+      { category: "hairstyle", description: "发型不同。" },
+      { category: "clothing", description: "服饰不同。" },
+      { category: "expression", description: "表情不同。" },
+      { category: "accessory", description: "配饰不同。" },
+      { category: "gaze", description: "注视方向不同。" },
+    ];
+    const client = new AzureFoundryClient(config, {
+      credential,
+      fetch: vi.fn(async () => completion({ differences })) as typeof globalThis.fetch,
+    });
+    await expect(new AzureFoundryDifferenceProvider(client).analyze(
+      { bytes: Buffer.from("new"), mimeType: "image/jpeg", demoCase: "success" },
+      referencePhoto,
+    )).resolves.toEqual(differences);
+  });
+
+  it("缺少匹配旧照时明确报错，不随机编造场景", async () => {
+    const fetch = vi.fn();
+    const client = new AzureFoundryClient(config, { credential, fetch });
+    await expect(new AzureFoundryStoryProvider(client).generate([]))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -251,7 +238,7 @@ describe("Azure Foundry provider", () => {
       credential,
       fetch: vi.fn(async () => completion({}, status)) as typeof globalThis.fetch,
     });
-    await expect(new AzureFoundryStoryProvider(client).generate([]))
+    await expect(new AzureFoundryStoryProvider(client).generate([], undefined, referencePhoto))
       .rejects.toMatchObject({ code, retryable });
   });
 
@@ -279,7 +266,7 @@ describe("Azure Foundry provider", () => {
         credential,
         fetch: vi.fn(async () => completion(response)) as typeof globalThis.fetch,
       });
-      await expect(new AzureFoundryStoryProvider(client).generate([]))
+      await expect(new AzureFoundryStoryProvider(client).generate([], undefined, referencePhoto))
         .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
     }
   });
@@ -292,7 +279,7 @@ describe("Azure Foundry provider", () => {
         content: `你在二十年后${"笑".repeat(500)}`,
       })) as typeof globalThis.fetch,
     });
-    await expect(new AzureFoundryStoryProvider(client).generate([]))
+    await expect(new AzureFoundryStoryProvider(client).generate([], undefined, referencePhoto))
       .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", retryable: false });
   });
 });

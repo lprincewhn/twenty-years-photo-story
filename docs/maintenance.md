@@ -6,7 +6,7 @@
 
 - `FaceMatchProvider.match(photo)`：返回人脸数量和候选 `personId`/分数，不直接决定身份结论。
 - `DifferenceProvider.analyze(photo, referencePhoto)`：比较当前照片与人物库旧照，只返回发型、服饰、表情、配饰、眼神枚举及客观描述。
-- `StoryProvider.generate(differences)`：返回固定 AI 标签、标题、正文和免责声明。
+- `StoryProvider.generate(differences, signal, referencePhoto)`：真实模式根据匹配旧照识别场景并结合差异生成故事，返回固定 AI 标签、标题、正文和免责声明；mock 不需要旧照。
 - `NarrationProvider.synthesize(text)`：把故事标题和正文合成为浏览器可播放音频。
 
 `apps/server/src/providers/index.ts` 是唯一选择入口。默认 `mock` 无密钥可运行。`real` 使用 Azure Face adapter 与共用 GPT-5.6 Sol deployment 的两个 Foundry adapter；任一真实 provider 失败都不会回落到 mock。配置 Azure Speech 自定义终结点和完整 Resource ID 后，朗读 provider 可独立切换为 Azure 情感语音，并通过 `DefaultAzureCredential` 使用 Entra ID。
@@ -27,7 +27,7 @@
 - 差异与故事接口共用一个 GPT-5.6 Sol deployment，但保留两个独立 provider 类和 JSON Schema；故事正文最多 500 字。
 - 使用 `DefaultAzureCredential` 和 `https://cognitiveservices.azure.com/.default`，生产身份需有 `Cognitive Services OpenAI User`；不接受 API key。
 - 差异分析只向模型发送人物库旧照和本次上传照片，提示词禁止推断年龄、种族、健康、宗教、身份和真实经历。响应还会经过严格 schema 与四类别白名单两层校验。
-- 故事只接收已过滤差异，不向模型发送人物展示名；正文必须使用第二人称并明确体现二十年跨度。应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。
+- 故事接收已过滤差异与匹配人物的完整已授权旧照，不向模型发送当前照片或人物展示名。核心场景由模型识别旧照背景，不再属于随机创意坐标；背景无法辨认时不得猜测具体场景。正文必须使用第二人称并明确体现二十年跨度。应用层无条件覆盖 `label` 与 `disclaimer`，不信任模型自行声明。
 - 默认总超时 60 秒，客户端取消会向下游传播；429 映射为 `RATE_LIMITED`，网络、超时、无效 JSON 和服务错误映射为 `PROVIDER_UNAVAILABLE`。
 - 每次 Foundry 调用输出结构化的 `foundry.request` / `foundry.response` 生命周期日志，包含随机交互标识、schema、deployment、脱敏后的提示词、消息角色、图片 MIME、HTTP 状态、耗时、响应字节数和错误码。
 - 提示词日志保留静态指令和非敏感创意坐标；图片替换为 MIME 脱敏标记，故事输入中的可见差异仅保留条数。不得记录图片、base64 请求体、人物名、差异正文或故事内容。请求结束后，上传照片与从私有人物库读取的旧照 Buffer 都会清零。
@@ -50,8 +50,8 @@
 
 1. 浏览器得到明确授权后取得 `File`；预览使用对象 URL。
 2. 用户确认后通过 HTTPS 上传单张图。
-3. Multer 在内存创建上传 Buffer；匹配成功后再读取人物库旧照，两张照片仅在本次请求中发送给 Foundry 做可见差异分析。
-4. 差异调用完成后立即清零旧照 Buffer；响应构造或出错后清零上传 Buffer，再由运行时回收。
+3. Multer 在内存创建上传 Buffer；匹配成功且确认旧照全员授权后读取人物库旧照，人物裁剪图与上传照片发送给 Foundry 做可见差异分析，完整旧照在故事请求中用于识别背景场景。
+4. 差异调用完成后立即清零人物裁剪 Buffer；完整旧照在故事调用期间保持可用，响应构造或出错后与上传 Buffer 一并清零，再由运行时回收。旧照和多模态文本中的差异均不会写入日志。
 5. 浏览器重拍、重置或卸载时撤销对象 URL。
 
 现场上传不配置磁盘、数据库、队列、结果缓存或内容日志。Azure Detect 的临时 faceId TTL 为 60 秒。人物库的 persisted face 属于另行明确授权的持久数据，存于 Azure southeastasia，并由上述删除 + 重训流程管理。若将来需要异步处理现场照片，必须先完成隐私影响评估、明确最短保留期限、加密、自动删除和用户撤回接口，并重新取得授权。
