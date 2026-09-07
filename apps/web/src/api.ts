@@ -18,6 +18,14 @@ export interface ExperienceResult {
     score: number;
     threshold: number;
     confidence: "high" | "medium";
+    summary: {
+      count: number;
+      averageScore: number;
+      highestScore: number;
+      highestPhotoPath: string;
+      lowestPhotoPath: string;
+      selectedPhotoPath: string;
+    };
     person: {
       id: string;
       oldPhotoUrl: string;

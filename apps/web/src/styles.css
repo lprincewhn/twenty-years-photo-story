@@ -383,7 +383,7 @@ summary:focus-visible,
   text-align: center;
 }
 
-.confidence {
+.match-summary {
   background: #eef5f5;
   border-radius: 16px;
   display: grid;
@@ -392,12 +392,19 @@ summary:focus-visible,
   padding: 1rem;
 }
 
-.confidence strong {
-  color: #153b43;
-  font-size: 1.1rem;
+.match-summary div + div {
+  margin-top: 0.75rem;
 }
 
-.source-note,
+.match-summary dt {
+  font-weight: 700;
+}
+
+.match-summary dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
 .retention,
 .request-id {
   color: #625a55;

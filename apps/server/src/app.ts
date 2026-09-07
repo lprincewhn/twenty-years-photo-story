@@ -13,6 +13,7 @@ import multer from "multer";
 import sharp from "sharp";
 import type { AppConfig } from "./config.js";
 import { AppError, faceCountError } from "./errors.js";
+import { summarizeMatchedPhotos } from "./match-summary.js";
 import {
   hasValidImageSignature,
   MAX_PHOTO_BYTES,
@@ -66,7 +67,11 @@ export function selectRandomEligibleCandidate(
   candidates: MatchCandidate[],
   threshold: number,
   randomIndex: (maxExclusive: number) => number = randomInt,
-): { candidate: MatchCandidate | undefined; highestScore: number } {
+): {
+  candidate: MatchCandidate | undefined;
+  highestScore: number;
+  eligibleCandidates: MatchCandidate[];
+} {
   let highestScore = 0;
   for (const candidate of candidates) {
     if (!Number.isFinite(candidate.score) || candidate.score < 0 || candidate.score > 1) {
@@ -80,6 +85,7 @@ export function selectRandomEligibleCandidate(
       ? eligibleCandidates[randomIndex(eligibleCandidates.length)]
       : undefined,
     highestScore,
+    eligibleCandidates,
   };
 }
 
@@ -482,7 +488,7 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
             throw faceCountError(faceOutput.faceCount);
           }
 
-          const { candidate, highestScore } = selectRandomEligibleCandidate(
+          const { candidate, highestScore, eligibleCandidates } = selectRandomEligibleCandidate(
             faceOutput.candidates,
             config.matchThreshold,
           );
@@ -506,6 +512,13 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
           ) {
             throw new Error("provider 候选不在授权人物库");
           }
+          const summary = summarizeMatchedPhotos(
+            eligibleCandidates,
+            config.providerMode === "real"
+              ? people.filter((entry) => isPhotoFullyAuthorized(peopleLibrary, entry.photoId))
+              : people,
+            person.oldPhotoFile,
+          );
           let rawDifferences;
           if (config.providerMode === "real") {
             if (person.photoMimeType === "image/svg+xml") {
@@ -582,6 +595,7 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
               score,
               threshold: config.matchThreshold,
               confidence: score >= 0.92 ? "high" : "medium",
+              summary,
               person: {
                 id: person.id,
                 oldPhotoUrl: person.oldPhotoUrl,

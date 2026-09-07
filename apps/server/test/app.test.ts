@@ -223,6 +223,14 @@ describe("照片故事 API", () => {
       score: 0.94,
       threshold: 0.82,
       confidence: "high",
+      summary: {
+        count: 1,
+        averageScore: 0.94,
+        highestScore: 0.94,
+        highestPhotoPath: "demo-xiaoxia-old.svg",
+        lowestPhotoPath: "demo-xiaoxia-old.svg",
+        selectedPhotoPath: "demo-xiaoxia-old.svg",
+      },
     });
     expect(response.body.differences).toHaveLength(5);
     expect(response.body.story.label).toBe("AI 创作/虚构");
@@ -336,10 +344,12 @@ describe("照片故事 API", () => {
     expect(selectRandomEligibleCandidate(candidates, 0.82, () => 0)).toEqual({
       candidate: candidates[0],
       highestScore: 0.99,
+      eligibleCandidates: [candidates[0], candidates[2]],
     });
     expect(selectRandomEligibleCandidate(candidates, 0.82, () => 1)).toEqual({
       candidate: candidates[2],
       highestScore: 0.99,
+      eligibleCandidates: [candidates[0], candidates[2]],
     });
   });
 
