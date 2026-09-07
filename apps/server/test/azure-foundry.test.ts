@@ -72,6 +72,7 @@ describe("Azure Foundry provider", () => {
     const storyMessages = bodies[1]!.messages as Array<{ role: string; content: string }>;
     expect(storyMessages[0]!.content).toContain("使用用户消息中的本次创意坐标");
     expect(storyMessages[0]!.content).toContain("搞笑、抖梗的的欢乐");
+    expect(storyMessages[0]!.content).toContain("故事主人公二十年前是大学生，而现在是怀念青春的中年人。");
     expect(storyMessages[0]!.content).toContain("适当补充导致二十年差异的原因和经历");
     expect(storyMessages[0]!.content).toContain("正文最多500字");
     expect(storyMessages[0]!.content).not.toContain("不得补充敏感属性");
