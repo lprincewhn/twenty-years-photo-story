@@ -369,11 +369,10 @@ summary:focus-visible,
 }
 
 .face-highlight {
-  border: 3px solid #ffdf52;
-  border-radius: 10px;
-  box-shadow:
-    0 0 0 2px rgba(21, 59, 67, 0.88),
-    0 0 18px rgba(255, 223, 82, 0.72);
+  outline: 2px solid #ffdf52;
+  outline-offset: 2px;
+  box-shadow: none;
+  pointer-events: none;
   position: absolute;
 }
 

@@ -124,12 +124,12 @@ describe("移动端核心体验", () => {
     expect(URL.createObjectURL).toHaveBeenCalledWith(
       expect.objectContaining({ type: "audio/mpeg" }),
     );
-    expect(screen.getByLabelText("匹配人物位置")).toHaveStyle({
-      left: "20%",
-      top: "15%",
-      width: "30%",
-      height: "40%",
-    });
+    const highlightStyle = screen.getByLabelText("匹配人物位置").style;
+    expect(screen.getAllByLabelText("匹配人物位置")).toHaveLength(1);
+    expect(parseFloat(highlightStyle.left)).toBeCloseTo(5);
+    expect(parseFloat(highlightStyle.top)).toBeCloseTo(0);
+    expect(parseFloat(highlightStyle.width)).toBeCloseTo(60);
+    expect(parseFloat(highlightStyle.height)).toBeCloseTo(75);
     expect(screen.getByLabelText("匹配人物位置")).toBeEmptyDOMElement();
     expect(screen.getByText("这是一则跨越二十年的温暖虚构故事。")).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");
@@ -139,6 +139,24 @@ describe("移动端核心体验", () => {
     await waitFor(() =>
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:本地预览"),
     );
+  });
+
+  it("旧照没有人脸坐标时不绘制匹配框", async () => {
+    const user = userEvent.setup();
+    const analyze = vi.fn().mockResolvedValue({
+      ...successResult,
+      match: {
+        ...successResult.match,
+        person: { ...successResult.match.person, faceBox: null },
+      },
+    });
+    render(<App analyze={analyze} authorize={vi.fn().mockResolvedValue(undefined)} />);
+
+    await reachPreview(user);
+    await user.click(screen.getByRole("button", { name: "确认并生成故事" }));
+
+    expect(await screen.findByAltText("匹配到的旧照")).toBeInTheDocument();
+    expect(screen.queryByLabelText("匹配人物位置")).not.toBeInTheDocument();
   });
 
   it("显示无人脸的中文原因并允许重新拍摄", async () => {
