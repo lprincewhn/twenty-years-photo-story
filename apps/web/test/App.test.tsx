@@ -125,10 +125,11 @@ describe("移动端核心体验", () => {
       expect.objectContaining({ type: "audio/mpeg" }),
     );
     const highlightStyle = screen.getByLabelText("匹配人物位置").style;
-    expect(parseFloat(highlightStyle.left)).toBeCloseTo(12.5);
-    expect(parseFloat(highlightStyle.top)).toBeCloseTo(5);
-    expect(parseFloat(highlightStyle.width)).toBeCloseTo(45);
-    expect(parseFloat(highlightStyle.height)).toBeCloseTo(60);
+    expect(screen.getAllByLabelText("匹配人物位置")).toHaveLength(1);
+    expect(parseFloat(highlightStyle.left)).toBeCloseTo(5);
+    expect(parseFloat(highlightStyle.top)).toBeCloseTo(0);
+    expect(parseFloat(highlightStyle.width)).toBeCloseTo(60);
+    expect(parseFloat(highlightStyle.height)).toBeCloseTo(75);
     expect(screen.getByLabelText("匹配人物位置")).toBeEmptyDOMElement();
     expect(screen.getByText("这是一则跨越二十年的温暖虚构故事。")).toBeInTheDocument();
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");

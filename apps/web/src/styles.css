@@ -370,7 +370,8 @@ summary:focus-visible,
 
 .face-highlight {
   outline: 2px solid #ffdf52;
-  box-shadow: 0 0 0 3px rgba(21, 59, 67, 0.88);
+  outline-offset: 2px;
+  box-shadow: none;
   pointer-events: none;
   position: absolute;
 }
