@@ -16,6 +16,7 @@ import {
   type ExperienceResult,
 } from "./api";
 import { captureFrame, stopMediaStream } from "./camera";
+import { FaceHighlight } from "./FaceHighlight";
 
 type Phase = "intro" | "capture" | "preview" | "uploading" | "result" | "error";
 
@@ -410,16 +411,7 @@ export function App({
                 <div className="matched-photo">
                   <img src={result.match.person.oldPhotoUrl} alt="匹配到的旧照" />
                   {result.match.person.faceBox && (
-                    <span
-                      className="face-highlight"
-                      aria-label="匹配人物位置"
-                      style={{
-                        left: `${result.match.person.faceBox.left * 100}%`,
-                        top: `${result.match.person.faceBox.top * 100}%`,
-                        width: `${result.match.person.faceBox.width * 100}%`,
-                        height: `${result.match.person.faceBox.height * 100}%`,
-                      }}
-                    />
+                    <FaceHighlight faceBox={result.match.person.faceBox} />
                   )}
                 </div>
                 <figcaption>二十年前 · 已框选匹配人物</figcaption>
