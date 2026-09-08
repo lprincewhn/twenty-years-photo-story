@@ -59,6 +59,9 @@ describe("移动端核心体验", () => {
   it("未明确授权时不进入拍摄并给出可聚焦提示", async () => {
     const user = userEvent.setup();
     render(<App authorize={vi.fn()} />);
+    expect(screen.getByRole("checkbox")).toHaveAccessibleDescription(
+      /故事标题、正文及匹配旧照信息会记录到受限服务日志/,
+    );
     await user.click(screen.getByRole("button", { name: "验证并开始拍照" }));
     render(<App />);
     expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);
@@ -149,6 +152,10 @@ describe("移动端核心体验", () => {
     expect(parseFloat(highlightStyle.height)).toBeCloseTo(75);
     expect(screen.getByLabelText("匹配人物位置")).toBeEmptyDOMElement();
     expect(screen.getByText("这是一则跨越二十年的温暖虚构故事。")).toBeInTheDocument();
+    const storyArticle = screen.getByRole("article");
+    expect(storyArticle.querySelector("h3")?.textContent).toBe(successResult.story.title);
+    expect(storyArticle.querySelector("p:not(.story-label)")?.textContent)
+      .toBe(successResult.story.content);
     expect(analyze).toHaveBeenCalledWith(expect.any(File), true, "success");
 
     await user.click(screen.getByRole("button", { name: "重新体验" }));

@@ -290,6 +290,7 @@ describe("照片故事 API", () => {
           photoPath: "demo-xiaoxia-old.svg",
           score: 0.94,
           threshold: config.matchThreshold,
+          summary: response.body.match.summary,
         },
         story: { title: response.body.story.title, content: response.body.story.content },
         normalization: { titleChanged: true, contentChanged: true },
@@ -301,6 +302,31 @@ describe("照片故事 API", () => {
       expect(serialized).not.toContain(accessCode);
       expect(serialized).not.toContain(config.peopleAssetSecret);
       expect(serialized).not.toContain(response.body.differences[0].description);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("朗读失败仍保留已生成故事的优化日志，并将换行编码在单行 JSON 内", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const providers = createMockProviders();
+      const story = await providers.story.generate([]);
+      providers.story.generate = vi.fn(async () => ({
+        ...story,
+        content: '你在二十年后写下：\n{"约定":"再见"}',
+      }));
+      providers.narration.synthesize = vi.fn(async () => { throw new Error("speech failed"); });
+      await validRequest(app(providers)).expect(502);
+      const lines = log.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith("[experience] "));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).not.toContain("\n");
+      expect(JSON.parse(lines[0]!.slice("[experience] ".length))).toMatchObject({
+        story: { content: '你在二十年后写下：\n{"约定":"再见"}' },
+        normalization: { titleChanged: false, contentChanged: false },
+      });
     } finally {
       log.mockRestore();
     }

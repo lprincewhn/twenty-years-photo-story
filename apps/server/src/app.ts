@@ -588,6 +588,7 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
               photoPath: person.oldPhotoFile,
               score,
               threshold: config.matchThreshold,
+              summary,
             },
             story: { title: story.title, content: story.content },
             normalization: {
