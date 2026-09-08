@@ -58,7 +58,7 @@ AZURE_FACE_DETECTION_MODEL=detection_03
 AZURE_FACE_RECOGNITION_MODEL=recognition_04
 AZURE_FACE_ID_TTL_SECONDS=60
 AZURE_FACE_IDENTIFY_THRESHOLD=0.5
-AZURE_FACE_MAX_CANDIDATES=5
+AZURE_FACE_MAX_CANDIDATES=100
 AZURE_FACE_TIMEOUT_MS=8000
 AZURE_FOUNDRY_ENDPOINT=https://<ai-services-resource>.cognitiveservices.azure.com
 AZURE_FOUNDRY_DEPLOYMENT=gpt-5.6-sol
@@ -66,6 +66,8 @@ AZURE_FOUNDRY_TIMEOUT_MS=60000
 ```
 
 用户指派 MI 另设 `AZURE_CLIENT_ID`。同一身份还需在 Foundry 资源上具备 `Cognitive Services OpenAI User`。`AZURE_FACE_IDENTIFY_THRESHOLD` 必须严格小于 `MATCH_THRESHOLD`。这些变量均不得使用 `VITE_` 前缀。进程启动会读取容器及训练状态并校验 `recognition_04`；失败即拒绝启动，不静默降级。
+
+`AZURE_FACE_MAX_CANDIDATES` 默认值为 100，直接作为在线 Identify 请求的 `maxNumOfCandidatesReturned`。照片数量及分数统计仅覆盖返回候选中严格高于业务阈值的照片（合照去重），不代表全库达标照片总数。
 
 ## 反向代理要求
 

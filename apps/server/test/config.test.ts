@@ -38,6 +38,7 @@ describe("Azure Face 配置", () => {
       recognitionModel: "recognition_04",
       faceIdTtlSeconds: 60,
       identifyThreshold: 0.5,
+      maxCandidates: 100,
     });
     expect(readConfig({
       PROVIDER_MODE: "real",
