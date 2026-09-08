@@ -491,12 +491,6 @@ summary:focus-visible,
   width: 64px;
 }
 
-.page-footer {
-  color: #645a54;
-  font-size: 0.84rem;
-  padding: 1.4rem;
-  text-align: center;
-}
 
 @keyframes pulse {
   from {

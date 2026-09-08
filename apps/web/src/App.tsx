@@ -485,10 +485,6 @@ export function App({
           </section>
         )}
       </main>
-
-      <footer className="page-footer">
-        <p>人物资料采用自制插画，不含未授权真实人物照片。</p>
-      </footer>
     </div>
   );
 }
