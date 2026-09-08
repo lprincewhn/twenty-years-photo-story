@@ -420,11 +420,14 @@ export function App({
                 <figcaption>现在 · 你的本次照片</figcaption>
               </figure>
             </div>
-            <div className="confidence">
-              <span>匹配分数 {(result.match.score * 100).toFixed(0)}%</span>
-              <span>结论阈值 {(result.match.threshold * 100).toFixed(0)}%</span>
-            </div>
-            <p className="source-note">{result.match.person.sourceNote}</p>
+            <dl className="match-summary" aria-label="匹配照片信息">
+              <div><dt>高于阈值的照片数量</dt><dd>{result.match.summary.count}</dd></div>
+              <div><dt>平均匹配分数</dt><dd>{(result.match.summary.averageScore * 100).toFixed(2)}%</dd></div>
+              <div><dt>最高匹配分数</dt><dd>{(result.match.summary.highestScore * 100).toFixed(2)}%</dd></div>
+              <div><dt>最高分照片路径</dt><dd>{result.match.summary.highestPhotoPath}</dd></div>
+              <div><dt>最低分照片路径</dt><dd>{result.match.summary.lowestPhotoPath}</dd></div>
+              <div><dt>已选照片路径</dt><dd>{result.match.summary.selectedPhotoPath}</dd></div>
+            </dl>
             <h3>只看得见的变化</h3>
             <ul className="difference-list">
               {result.differences.map((difference) => (

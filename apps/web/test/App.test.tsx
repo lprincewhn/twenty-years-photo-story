@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -12,6 +12,14 @@ const successResult: ExperienceResult = {
     score: 0.94,
     threshold: 0.82,
     confidence: "high",
+    summary: {
+      count: 3,
+      averageScore: 0.9266666667,
+      highestScore: 0.99,
+      highestPhotoPath: "highest.jpg",
+      lowestPhotoPath: "lowest.jpg",
+      selectedPhotoPath: "selected.jpg",
+    },
     person: {
       id: "demo-xiaoxia",
       oldPhotoUrl: "/api/people/demo-xiaoxia/photo",
@@ -114,8 +122,17 @@ describe("移动端核心体验", () => {
 
     expect(await screen.findByRole("heading", { name: "找到一张旧照" })).toBeInTheDocument();
     expect(screen.getAllByText(/AI 创作\/虚构/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("匹配分数 94%")).toBeInTheDocument();
-    expect(screen.getByText("结论阈值 82%")).toBeInTheDocument();
+    const summary = screen.getByLabelText("匹配照片信息");
+    expect(within(summary).getAllByRole("term").map((term) => term.textContent)).toEqual([
+      "高于阈值的照片数量", "平均匹配分数", "最高匹配分数",
+      "最高分照片路径", "最低分照片路径", "已选照片路径",
+    ]);
+    expect(within(summary).getAllByRole("definition").map((value) => value.textContent)).toEqual([
+      "3", "92.67%", "99.00%", "highest.jpg", "lowest.jpg", "selected.jpg",
+    ]);
+    expect(screen.queryByText("匹配分数 94%")).not.toBeInTheDocument();
+    expect(screen.queryByText("结论阈值 82%")).not.toBeInTheDocument();
+    expect(screen.queryByText(successResult.match.person.sourceNote)).not.toBeInTheDocument();
     expect(screen.getByText("眼神")).toBeInTheDocument();
     expect(screen.getByText("视线从直视镜头变为微微转向一侧。")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/演示|示例|模拟|demo|mock/i);

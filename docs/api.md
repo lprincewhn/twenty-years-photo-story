@@ -38,6 +38,23 @@ curl -X POST http://localhost:3000/api/experience \
 
 成功响应包含请求标识、保留说明、随机选中的达标候选之匹配分数与阈值、人物示例、允许类别差异、带固定标签的虚构故事，以及 `narration` 中的音频 MIME、Base64 音频和 provider 标识。应用从严格高于业务阈值的候选中均匀随机选择；配置 Azure Speech 时音频为 MP3 情感朗读，未配置密钥的 mock 模式返回短 WAV 占位音频。现场照片本身不会出现在响应中。匹配成功时，服务端还会签发 5 分钟有效、绑定匹配人物的 `HttpOnly; Secure; SameSite=Strict` 授权 Cookie；前端无需读取该 Cookie。
 
+## 匹配照片信息
+
+成功响应的 `match.summary` 用于匹配照片信息展示，仅显示以下六项：
+
+| 字段 | 含义 |
+|---|---|
+| `count` | 匹配分数严格高于阈值的照片数量 |
+| `averageScore` | 上述照片的平均匹配分数（0～1） |
+| `highestScore` | 上述照片的最高匹配分数（0～1） |
+| `highestPhotoPath` | 上述照片中最高分照片的文件路径 |
+| `lowestPhotoPath` | 上述照片中最低分照片的文件路径 |
+| `selectedPhotoPath` | 本次实际随机选中照片的文件路径 |
+
+统计按照片文件去重，合影有多个达标人脸时取该照片的最高人脸分数；最低分路径也只在高于阈值的照片中选取。并列分数按 provider 返回顺序稳定排序，最高取首项、最低取末项。路径相对于人物库的 assets 目录，不包含服务器绝对路径，也不授予未选中照片的读取权限。只有一张达标照片时三个路径相同；没有达标照片时保持 `MATCH_BELOW_THRESHOLD` 错误，不返回照片路径。
+
+原有 `match.score`、`threshold`、`confidence` 和 `person.sourceNote` 保留在接口中兼容调用方，但不再显示在结果页的匹配照片信息区域。
+
 ## 读取匹配人物照片
 
 `GET /api/people/:personId/photo`

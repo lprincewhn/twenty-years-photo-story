@@ -145,7 +145,7 @@ components:
           description: 现场照片保留说明
         match:
           type: object
-          required: [matched, score, threshold, confidence, person]
+          required: [matched, score, threshold, confidence, person, summary]
           properties:
             matched:
               type: boolean
@@ -163,12 +163,36 @@ components:
               enum: [high, medium]
             person:
               $ref: "#/components/schemas/Person"
+            summary:
+              $ref: "#/components/schemas/MatchPhotoSummary"
         differences:
           type: array
           items:
             $ref: "#/components/schemas/VisibleDifference"
         story:
           $ref: "#/components/schemas/FictionStory"
+    MatchPhotoSummary:
+      type: object
+      description: 严格高于阈值的照片统计；同一照片取最高人脸分数，路径相对于人物库 assets 目录。
+      required: [count, averageScore, highestScore, highestPhotoPath, lowestPhotoPath, selectedPhotoPath]
+      properties:
+        count:
+          type: integer
+          minimum: 1
+        averageScore:
+          type: number
+          minimum: 0
+          maximum: 1
+        highestScore:
+          type: number
+          minimum: 0
+          maximum: 1
+        highestPhotoPath:
+          type: string
+        lowestPhotoPath:
+          type: string
+        selectedPhotoPath:
+          type: string
     Person:
       type: object
       required: [id, oldPhotoUrl, sourceNote, faceBox]
