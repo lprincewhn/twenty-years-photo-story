@@ -39,6 +39,25 @@ function people() {
 }
 
 describe("Azure Face adapter", () => {
+  it.each([7, 100])("在线 Identify 请求使用配置的 %i 个候选上限", async (maxCandidates) => {
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      void init;
+      return String(input).includes("/detect?")
+        ? json([{ faceId, faceRectangle: { left: 1, top: 2, width: 3, height: 4 } }])
+        : json([{ faceId, candidates: [{ personId: azurePersonId, confidence: 0.91 }] }]);
+    });
+    const library = people();
+    library.people[0]!.azurePersonId = azurePersonId;
+    const client = new AzureFaceClient({ ...config, maxCandidates }, { credential, fetch });
+    await new AzureFaceMatchProvider(client, library).match({
+      bytes: Buffer.from("photo"), mimeType: "image/jpeg", demoCase: "success",
+    });
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toMatchObject({
+      maxNumOfCandidatesReturned: maxCandidates,
+      confidenceThreshold: config.identifyThreshold,
+    });
+  });
+
   it("使用 v1.2、Bearer token 和 60 秒 faceId TTL，并映射候选", async () => {
     const requests: string[] = [];
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

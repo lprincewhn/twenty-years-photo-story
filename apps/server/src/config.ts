@@ -27,7 +27,7 @@ const environmentSchema = z.object({
   AZURE_FACE_RECOGNITION_MODEL: z.literal("recognition_04").default("recognition_04"),
   AZURE_FACE_ID_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(60),
   AZURE_FACE_IDENTIFY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.5),
-  AZURE_FACE_MAX_CANDIDATES: z.coerce.number().int().min(1).max(100).default(5),
+  AZURE_FACE_MAX_CANDIDATES: z.coerce.number().int().min(1).max(100).default(100),
   AZURE_FACE_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(8_000),
   AZURE_FOUNDRY_ENDPOINT: z.string().url().optional(),
   AZURE_FOUNDRY_DEPLOYMENT: z.string().min(1).max(128).default("gpt-5.6-sol"),

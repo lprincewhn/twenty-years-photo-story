@@ -10,6 +10,20 @@ const people = [
 ];
 
 describe("matched photo summary", () => {
+  it("does not truncate 100 eligible photos to five", () => {
+    const photos = Array.from({ length: 100 }, (_, index) => ({
+      id: `person-${index}`,
+      oldPhotoFile: `photo-${index}.jpg`,
+    }));
+    const { eligibleCandidates, candidate } = selectRandomEligibleCandidate(
+      photos.map((photo) => ({ personId: photo.id, score: 0.9 })),
+      0.6,
+      () => 99,
+    );
+    expect(candidate?.personId).toBe("person-99");
+    expect(summarizeMatchedPhotos(eligibleCandidates, photos, "photo-99.jpg").count).toBe(100);
+  });
+
   it("summarizes all strictly eligible photos, independently of random selection", () => {
     const { eligibleCandidates, candidate } = selectRandomEligibleCandidate([
       { personId: "lowest", score: 0.85 },
