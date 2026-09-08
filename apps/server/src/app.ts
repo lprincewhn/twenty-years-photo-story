@@ -31,6 +31,7 @@ import {
   type MatchCandidate,
   type PhotoInput,
   type ProviderSet,
+  type ReferencePhotoInput,
 } from "./providers/types.js";
 
 const peopleAssetsDirectory = fileURLToPath(resolvePeopleLibraryPaths().assetsDirectory);
@@ -429,6 +430,7 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
     upload.single("photo"),
     async (request, response) => {
       const bytes = request.file?.buffer;
+      let referencePhoto: ReferencePhotoInput | undefined;
       try {
         if (request.body?.consent !== "true") {
           throw new AppError(
@@ -516,6 +518,8 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
               throw new Error("人物照片路径无效");
             }
             const referenceBytes = await readFile(referencePath);
+            // Keep the full authorized background for scene recognition, not just the face crop.
+            referencePhoto = { bytes: referenceBytes, mimeType: person.photoMimeType };
             let matchedPersonBytes: Buffer | undefined;
             try {
               if (!person.faceBox || !person.photoWidth || !person.photoHeight) {
@@ -533,7 +537,6 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
               });
             } finally {
               matchedPersonBytes?.fill(0);
-              referenceBytes.fill(0);
             }
           } else {
             rawDifferences = await providers.difference.analyze(photo);
@@ -548,6 +551,7 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
           const generatedStory = await providers.story.generate(
             safeDifferences,
             photo.signal,
+            referencePhoto,
           );
           const story = {
             ...generatedStory,
@@ -610,6 +614,7 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
           );
         }
       } finally {
+        referencePhoto?.bytes.fill(0);
         bytes?.fill(0);
       }
     },

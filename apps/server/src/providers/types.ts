@@ -66,6 +66,7 @@ export interface StoryProvider {
   generate(
     differences: VisibleDifference[],
     signal?: AbortSignal,
+    referencePhoto?: ReferencePhotoInput,
   ): Promise<FictionStory>;
 }
 
