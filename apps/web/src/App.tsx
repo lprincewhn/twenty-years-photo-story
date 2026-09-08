@@ -274,6 +274,7 @@ export function App({
               <li><strong>谨慎表达：</strong>只描述发型、服饰、表情、配饰、眼神等可见特征。</li>
               <li><strong>不是身份认证：</strong>匹配仅用于寻找外貌相近的旧照，低于阈值不下结论。</li>
               <li><strong>故事是虚构：</strong>生成内容会显著标记“AI 创作/虚构”。</li>
+              <li><strong>优化日志：</strong>故事标题、正文及匹配旧照信息会记录到受限服务日志，用于排查和优化；不记录现场照片或人脸特征。</li>
             </ul>
             <label className="consent">
               <input
