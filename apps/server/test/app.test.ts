@@ -257,6 +257,74 @@ describe("照片故事 API", () => {
     expect(response.headers["set-cookie"]?.[0]).toContain("SameSite=Strict");
   });
 
+  it("清理故事末尾大括号，并以请求标识关联正文、匹配照片和朗读内容", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const providers = createMockProviders();
+    const original = await providers.story.generate([]);
+    providers.story.generate = vi.fn(async () => ({
+      ...original,
+      title: "重逢}",
+      content: "你在二十年后说：“会暖起来。”} \n",
+    }));
+    const narration = vi.spyOn(providers.narration, "synthesize");
+    try {
+      const response = await validRequest(app(providers))
+        .set("x-request-id", "story-diagnostics-123")
+        .expect(200);
+      expect(response.body.story.title).toBe("重逢");
+      expect(response.body.story.content).toBe("你在二十年后说：“会暖起来。”");
+      expect(narration).toHaveBeenCalledWith(
+        `${response.body.story.title}。${response.body.story.content}`,
+      );
+      const entries = log.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.startsWith("[experience] "))
+        .map((line) => JSON.parse(line.slice("[experience] ".length)));
+      expect(entries).toEqual([{
+        event: "experience.story_generated",
+        requestId: response.body.requestId,
+        providerMode: "mock",
+        match: {
+          personId: "demo-xiaoxia",
+          photoId: "legacy-demo-xiaoxia",
+          photoPath: "demo-xiaoxia-old.svg",
+          score: 0.94,
+          threshold: config.matchThreshold,
+        },
+        story: { title: response.body.story.title, content: response.body.story.content },
+        normalization: { titleChanged: true, contentChanged: true },
+      }]);
+      expect(response.body.requestId).toBe("story-diagnostics-123");
+      const serialized = JSON.stringify(entries);
+      expect(serialized).not.toContain("photo.jpg");
+      expect(serialized).not.toContain(validJpeg.toString("base64"));
+      expect(serialized).not.toContain(accessCode);
+      expect(serialized).not.toContain(config.peopleAssetSecret);
+      expect(serialized).not.toContain(response.body.differences[0].description);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("未匹配和空故事不记录成功故事日志", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const unmatched = createMockProviders();
+      unmatched.faceMatch.match = vi.fn(async () => ({ faceCount: 1, candidates: [] }));
+      await validRequest(app(unmatched)).expect(422);
+      const empty = createMockProviders();
+      const story = await empty.story.generate([]);
+      empty.story.generate = vi.fn(async () => ({ ...story, content: "} \n" }));
+      const narration = vi.spyOn(empty.narration, "synthesize");
+      await validRequest(app(empty)).expect(502);
+      expect(narration).not.toHaveBeenCalled();
+      expect(log.mock.calls.filter(([line]) => String(line).startsWith("[experience] ")))
+        .toHaveLength(0);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("只向完成匹配且 grant 人物一致的请求返回私有照片", async () => {
     const target = app();
     await request(target).get("/api/people/demo-xiaoxia/photo").expect(403);

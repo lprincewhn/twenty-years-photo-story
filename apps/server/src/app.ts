@@ -14,6 +14,7 @@ import sharp from "sharp";
 import type { AppConfig } from "./config.js";
 import { AppError, faceCountError } from "./errors.js";
 import { summarizeMatchedPhotos } from "./match-summary.js";
+import { removeTrailingUnmatchedBraces } from "./story-text.js";
 import {
   hasValidImageSignature,
   MAX_PHOTO_BYTES,
@@ -568,14 +569,36 @@ export function createApp({ config, providers, accessCode }: AppDependencies) {
           );
           const story = {
             ...generatedStory,
+            title: removeTrailingUnmatchedBraces(generatedStory.title),
+            content: removeTrailingUnmatchedBraces(generatedStory.content),
             label: "AI 创作/虚构" as const,
             disclaimer: "本故事由 AI 根据可见元素虚构，不代表人物的真实经历。",
           };
+          if (!story.title.trim() || !story.content.trim()) {
+            throw new Error("provider 返回了空故事");
+          }
+          const requestId = response.locals.requestId as string;
+          console.info(`[experience] ${JSON.stringify({
+            event: "experience.story_generated",
+            requestId,
+            providerMode: config.providerMode,
+            match: {
+              personId: person.id,
+              photoId: person.photoId,
+              photoPath: person.oldPhotoFile,
+              score,
+              threshold: config.matchThreshold,
+            },
+            story: { title: story.title, content: story.content },
+            normalization: {
+              titleChanged: story.title !== generatedStory.title,
+              contentChanged: story.content !== generatedStory.content,
+            },
+          })}`);
           const narration = await providers.narration.synthesize(
             `${story.title}。${story.content}`,
           );
 
-          const requestId = response.locals.requestId as string;
           const grant = signGrant(
             {
               personId: person.id,
